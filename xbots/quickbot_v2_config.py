@@ -15,31 +15,48 @@
 #              +                  +
 #               ++++++++++++++++++
 #
-# ir
-IRbl = "P9_40"
-IRfl = "P9_38"
-IRfm = "P9_36"
-IRfr = "P9_35"
-IRbr = "P9_33"
-IRS = (IRbl, IRfl, IRfm, IRfr, IRbr)
 
-# encoder aka odometry
-Ol_rx = "P9_22"
-Ol_tx = "P9_21"
-Or_rx = "P9_26"
-Or_tx = "P9_24"
+class encoderSerial:
+    def __init__(self, port, baudrate):
+        self.port = port
+        self.baudrate = baudrate
 
-# motors
-INl1 = "P8_14"
-INl2 = "P8_16"
-PWMl = "P9_16"
+class motorPin:
+    def __init__(self, dir1, dir2, pwm):
+        self.dir1 = dir1
+        self.dir2 = dir2
+        self.pwm = pwm
 
-INr1 = "P8_12"
-INr2 = "P8_10"
-PWMr = "P9_14"
+# IR sensor Pins
+irBL = "P9_40"  # IR back left pin
+irFL = "P9_38"  # IR front left pin
+irFM = "P9_36"  # IR front middle pin
+irFR = "P9_35"  # IR front right pin
+irBR = "P9_33"  # IR back right pin
+irPins = (irBL, irFL, irFM, irFR, irBR)  # IR pin set
 
-RMP = (INr1, INr2, PWMr)
-LMP = (INl1, INl2, PWMl)
+# Encoder (aka odometry) serials
+    # TTYO1: Rx=P9_26  Tx=P9_24
+    # TTYO2: Rx=P9_22  Tx=P9_21
+    # TTYO4: Rx=P9_11  Tx=P9_13
+    # TTYO5: Rx=P9_38  Tx=P9_38
+enL= encoderSerial('/dev/ttyO1', 38400)  # Encoder left serial
+enR = encoderSerial('/dev/ttyO2', 38400)  # Encoder right serial
 
-# led
-LED = "USR1"
+# Motor pins
+motorL = motorPin("P8_14", "P8_16", "P9_16")
+motorR = motorPin("P8_12", "P8_10", "P9_14")
+
+# INl1 = "P8_14"
+# INl2 = "P8_16"
+# PWMl = "P9_16"
+
+# INr1 = "P8_12"
+# INr2 = "P8_10"
+# PWMr = "P9_14"
+
+# RMP = (INr1, INr2, PWMr)
+# LMP = (INl1, INl2, PWMl)
+
+# LED pin
+ledPin = "USR1"

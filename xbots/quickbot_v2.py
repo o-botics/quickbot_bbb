@@ -1,12 +1,10 @@
-#!/usr/bin/python
 """
 @brief QuickBot class for Beaglebone Black
 
 @author Rowland O'Flaherty (rowlandoflaherty.com)
 @date 05/30/2014
 @version: 2.0
-@copyright: Copyright (C) 2014, Georgia Tech Research Corporation
-see the LICENSE file included with this software (see LINENSE file)
+@copyright: Copyright (C) 2014, see the LICENSE file
 """
 
 from __future__ import division
@@ -29,11 +27,6 @@ from base import LEFT
 ADCTIME = 0.002
 ADC_LOCK = threading.Lock()
 
-## Run variables
-RUN_FLAG = True
-RUN_FLAG_LOCK = threading.Lock()
-
-
 class QuickBot(base.BaseBot):
     """The QuickBot Class"""
 
@@ -41,20 +34,23 @@ class QuickBot(base.BaseBot):
     sampleTime = 20.0 / 1000.0
 
     # Motor Pins -- (LEFT, RIGHT)
-    dir1Pin = (config.INl1, config.INr1)
-    dir2Pin = (config.INl2, config.INr2)
-    pwmPin = (config.PWMl, config.PWMr)
+    dir1Pin = (config.motorL.dir1, config.motorR.dir1)
+    dir2Pin = (config.motorL.dir2, config.motorR.dir2)
+    pwmPin = (config.motorL.pwm, config.motorR.pwm)
 
     # LED pin
-    led = config.LED
+    led = config.ledPin
 
     # Encoder Serial
-    # TTYO1: Rx=P9_26  Tx=P9_24
-    # TTYO2: Rx=P9_22  Tx=P9_21
-    # TTYO4: Rx=P9_11  Tx=P9_13
-    # TTYO5: Rx=P9_38  Tx=P9_38
-    encoderSerial = (serial.Serial(port = '/dev/ttyO1', baudrate = 38400, timeout = .1), \
-                     serial.Serial(port = '/dev/ttyO2', baudrate = 38400, timeout = .1))
+    encoderSerial = (
+        serial.Serial(
+            port=config.enL.port,
+            baudrate=config.enL.baudrate,
+            timeout=.1),
+        serial.Serial(
+            port=config.enR.port,
+            baudrate=config.enR.baudrate,
+            timeout=.1))
     encoderBuffer = ['', '']
 
     # Constraints
@@ -69,30 +65,32 @@ class QuickBot(base.BaseBot):
 
     # State Encoder
     encTime = [0.0, 0.0]  # Last time encoders were read
-    encPos = [0.0, 0.0]  # Last encoder tick position
+    encRaw = [0.0, 0.0]  # Last encoder tick position
     encVel = [0.0, 0.0]  # Last encoder tick velocity
 
     def __init__(self, baseIP, robotIP):
         super(QuickBot, self).__init__(baseIP, robotIP)
 
         # State IR
-        self.nIR = len(config.IRS)
-        self.IRVal = self.nIR*[0.0]
+        self.nIR = len(config.irPins)
+        self.irVal = self.nIR*[0.0]
 
         # State Encoder
         self.encDir = [1, -1]      # Last encoder direction
-        self.encPos = [0, 0]      # Last encoder tick position
+        self.encRaw = [0, 0]      # Last encoder tick position
         self.encVel = [0.0, 0.0]  # Last encoder tick velocity
-        self.encPosOffset = [0, 0]  # Offset from raw encoder tick
+        self.encOffset = [0, 0]  # Offset from raw encoder tick
 
         # Initialize ADC
         ADC.setup()
 
         # Initialize IR thread
-        self.IRThread = threading.Thread(target=readIR, args=(self, ))
-        self.IRThread.daemon = True
+        self.irThreadRunning = False
+        self.irThread = threading.Thread(target=readIR, args=(self, ))
+        self.irThread.daemon = True
 
         # Initialize encoder threads
+        self.enThreadRunning = 2*[False]
         self.encDirThread = 2*[None]
         self.encPosThread = 2*[None]
         self.encVelThread = 2*[None]
@@ -101,24 +99,37 @@ class QuickBot(base.BaseBot):
                 target=readEncPos, args=(self, side))
             self.encPosThread[side].daemon = True
 
-        # Calibrate encoders
-        self.calibrateEncPos()
-
     def startThreads(self):
-        self.IRThread.start()
+        self.irThread.start()
         for side in range(0, 2):
             self.encPosThread[side].start()
 
+        # Calibrate encoders
+        self.calibrateEncPos()
+
+    def waitForThreads(self):
+        while self.irThreadRunning or \
+                self.enThreadRunning[LEFT] or \
+                self.enThreadRunning[RIGHT]:
+            time.sleep(self.sampleTime)
+
+    def getIr(self):
+        return self.irVal
+
     def calibrateEncPos(self):
+        print("DEBUG: cal encoder")
         self.setPWM([100, 100])
         time.sleep(0.1)
         self.setPWM([0, 0])
         time.sleep(1.0)
         self.resetEncPos()
 
+    def getEncRaw(self):
+        return self.encRaw
+
     def getEncPos(self):
-        return [self.encPos[LEFT] - self.encPosOffset[LEFT],
-                -1*(self.encPos[RIGHT] - self.encPosOffset[RIGHT])]
+        return [self.encRaw[LEFT] - self.encOffset[LEFT],
+                -1*(self.encRaw[RIGHT] - self.encOffset[RIGHT])]
 
     def getPos(self):
         pos = [0.0, 0.0]
@@ -128,44 +139,42 @@ class QuickBot(base.BaseBot):
                 2 * np.pi * self.wheelRadius
         return pos
 
+    def getEncOffset(self):
+        return self.encOffset()
+
     def resetEncPos(self):
-        self.encPosOffset[LEFT] = self.encPos[LEFT]
-        self.encPosOffset[RIGHT] = self.encPos[RIGHT]
+        self.encOffset[LEFT] = self.encRaw[LEFT]
+        self.encOffset[RIGHT] = self.encRaw[RIGHT]
+
+    def getEncVel(self):
+        return self.encVel
 
     def update(self):
         pass
 
-    def readIRValues(self):
-        prevVal = self.irVal[self.ithIR]
-        ADC_LOCK.acquire()
-        self.irVal[self.ithIR] = ADC.read_raw(config.IRS[self.ithIR])
-        time.sleep(ADCTIME)
-        ADC_LOCK.release()
-
-        if self.irVal[self.ithIR] >= 1100:
-            self.irVal[self.ithIR] = prevVal
-
-        self.ithIR = ((self.ithIR + 1) % 5)
-
 
 def readIR(self):
-    global RUN_FLAG
+    self.irThreadRunning = True
 
-    while RUN_FLAG:
+    while self.run_flag:
         for i in range(0, self.nIR):
             ADC_LOCK.acquire()
-            self.IRVal[i] = ADC.read_raw(config.IRS[i])
+            self.irVal[i] = ADC.read_raw(config.irPins[i])
             time.sleep(ADCTIME)
             ADC_LOCK.release()
 
+    self.irThreadRunning = False
+
 
 def readEncPos(self, side):
-    global RUN_FLAG
     sampleTime = (20.0 / 1000.0)
+    self.enThreadRunning[side] = True
 
-    while RUN_FLAG:
+    while self.run_flag:
         parseEncoderBuffer(self, side)
         time.sleep(sampleTime)
+
+    self.enThreadRunning[side] = False
 
 
 def parseEncoderBuffer(self, side):
@@ -187,7 +196,7 @@ def parseEncoderBuffer(self, side):
             if len(DResult) >= 1:
                 val = utils.convertHEXtoDEC(DResult[-1], 8)
                 if not math.isnan(val):
-                    self.encPos[side] = val
+                    self.encRaw[side] = val
                     encoderUpdateFlag = True
 
             VPattern = r'V([0-9A-F]{4})'
