@@ -17,6 +17,8 @@ import serial
 import math
 
 import numpy as np
+from numpy import pi as PI
+
 import quickbot_v2_config as config
 import Adafruit_BBIO.ADC as ADC
 
@@ -53,9 +55,12 @@ class QuickBot(base.BaseBot):
             timeout=.1))
     encoderBuffer = ['', '']
 
-    # Wheel parameter
+    # Wheel parameters
     ticksPerTurn = 128  # Number of ticks on encoder disc
     wheelRadius = (58.7 / 2.0) / 1000.0  # Radius of wheel in meters
+
+    # Encoder parameters
+    enc_vel_buf_size = 10 # Size of encoder velocity buffer
 
     # State Encoder
     enc_raw = [0.0, 0.0]  # Last encoder tick position
@@ -73,6 +78,10 @@ class QuickBot(base.BaseBot):
         self.enc_raw = [0, 0]      # Last encoder tick position
         self.enc_vel = [0.0, 0.0]  # Last encoder tick velocity
         self.enc_offset = [0.0, 0.0]  # Offset from raw encoder tick
+        self.enc_vel_buf_cnt = [0, 0]  # Encoder velocity buffer counters
+        self.enc_vel_buf = [[0.0] * self.enc_vel_buf_size,
+                            [0.0] * self.enc_vel_buf_size]  # Encoder velocity buffers
+
 
         # Initialize ADC
         ADC.setup()
@@ -82,9 +91,7 @@ class QuickBot(base.BaseBot):
         self.ir_thread.daemon = True
 
         # Initialize encoder threads
-        self.enc_dir_thread = 2*[None]
         self.enc_pos_thread = 2*[None]
-        self.enc_vel_thread = 2*[None]
         for side in range(0, 2):
             self.enc_pos_thread[side] = threading.Thread(
                 target=read_enc_val, args=(self, side))
@@ -136,14 +143,14 @@ class QuickBot(base.BaseBot):
         ang = [0.0, 0.0]
         enc_val = self.get_enc_val()
         for side in range(0, 2):
-            ang[side] = enc_val[side] / self.ticksPerTurn * 2 * np.pi
+            ang[side] = enc_val[side] / self.ticksPerTurn * 2 * PI
         return ang
 
-    def set_wheel_ang(self, ang):
+    def set_wheel_ang(self, ang):  # FIXME - Should move wheel to that angle
         """ Setter for wheel angles """
         enc_val = [0.0, 0.0]
         for side in range(0, 2):
-            enc_val[side] = ang[side] * self.ticksPerTurn / (2 * np.pi)
+            enc_val[side] = ang[side] * self.ticksPerTurn / (2 * PI)
         self.set_enc_val(enc_val)
 
     def get_enc_offset(self):
@@ -163,6 +170,19 @@ class QuickBot(base.BaseBot):
     def get_enc_vel(self):
         """ Getter for encoder velocity values """
         return self.enc_vel
+
+    def get_wheel_ang_vel(self):
+        """ Getter for wheel angular velocity values """
+        ang_vel = [0.0, 0.0]
+        enc_vel = self.get_enc_vel()
+        for side in range(0, 2):
+            ang_vel[side] = enc_vel[side] * (2* PI) / self.ticksPerTurn
+        return ang_vel
+
+    def set_wheel_ang_vel(self, ang_vel):
+        """ Setter for wheel angular velocity values """
+        pass
+
 
 
 def read_ir(self):
@@ -211,7 +231,21 @@ def parse_encoder_buffer(self, side):
             if len(v_result) >= 1:
                 vel = utils.convertHEXtoDEC(v_result[-1], 4)
                 if not math.isnan(vel):
-                    self.enc_vel[side] = vel
+                    if side == 1:
+                        vel = -1*vel
+                    self.enc_vel_buf_cnt[side] += 1
+                    this_cnt = self.enc_vel_buf_cnt[side]
+                    this_size = self.enc_vel_buf_size
+                    self.enc_vel_buf[side][this_cnt % this_size] = vel
+                    this_vel = np.median(self.enc_vel_buf[side])
+                    self.enc_vel[side] = this_vel
                     encoder_update_flag = True
+    else:
+        self.enc_vel_buf_cnt[side] += 1
+        this_cnt = self.enc_vel_buf_cnt[side]
+        this_size = self.enc_vel_buf_size
+        self.enc_vel_buf[side][this_cnt % this_size] = 0.0
+        this_vel = np.median(self.enc_vel_buf[side])
+        self.enc_vel[side] = this_vel
 
         return encoder_update_flag
