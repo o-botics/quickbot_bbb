@@ -137,6 +137,7 @@ class BaseBot(object):
         GPIO.cleanup()
         PWM.cleanup()
         if DEBUG:
+            pass
             # tictocPrint()
             # self.writeBuffersToFile()
         sys.stdout.write("Done\n")

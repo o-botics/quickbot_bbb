@@ -76,7 +76,7 @@ class QuickBot(base.BaseBot):
         super(QuickBot, self).__init__(baseIP, robotIP)
 
         # State IR
-        self.nIR = len(self.IRPin)
+        self.nIR = len(config.IRS)
         self.IRVal = self.nIR*[0.0]
 
         # State Encoder
@@ -154,7 +154,7 @@ def readIR(self):
     while RUN_FLAG:
         for i in range(0, self.nIR):
             ADC_LOCK.acquire()
-            self.IRVal[i] = ADC.read_raw(self.IRPin[i])
+            self.IRVal[i] = ADC.read_raw(config.IRS[i])
             time.sleep(ADCTIME)
             ADC_LOCK.release()
 
