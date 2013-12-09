@@ -10,6 +10,7 @@ import numpy as np
 
 import Adafruit_BBIO.GPIO as GPIO
 import Adafruit_BBIO.PWM as PWM
+import Adafruit_BBIO.ADC as ADC
 import serial
 import socket
 
@@ -51,8 +52,12 @@ class QuickBot:
     dir2Pin = ('P8_12', 'P8_16')
     pwmPin = ('P9_14', 'P9_16')
 
+    # ADC Pins
+    irPin = ('P9_39', 'P9_40', 'P9_37', 'P9_38', 'P9_35')
+
     # State -- (LEFT, RIGHT)
     pwm = [0, 0]
+    irVal = [0, 0, 0, 0, 0]
     encoderVal = [float('nan'), float('nan')]
     encoderVel = [float('nan'), float('nan')]
 
@@ -66,7 +71,6 @@ class QuickBot:
     encoderBuffer = ['', '']
 
     # UDP
-
     baseIP = '192.168.7.1'
     robotIP = '192.168.7.2'
 
@@ -100,6 +104,9 @@ class QuickBot:
 
         # Set motor speed to 0
         self.setPWM([0, 0])
+
+        # Initialize ADC
+        ADC.setup()
 
         # Set IP addresses
         self.baseIP = baseIP
@@ -210,10 +217,10 @@ class QuickBot:
         PWM.cleanup()
 
     def update(self):
+        self.readIRValues()
+
         encoderUpdateFlag = False
-
         encoderUpdateFlag = self.parseEncoderBuffer(LEFT)
-
         encoderUpdateFlag = encoderUpdateFlag or self.parseEncoderBuffer(RIGHT)
 
         self.parseCmdBuffer()
@@ -261,9 +268,16 @@ class QuickBot:
                         int(pwmRegex.match(args).group('RIGHT'))]
                         self.setPWM(pwm)
 
+            elif msgResult.group('CMD') == 'IRVAL':
+                if msgResult.group('QUERY'):
+                    reply = '[' + ', '.join(map(str, self.irVal)) + ']'
+                    print 'Sending: ' + reply
+                    self.robotSocket.sendto(reply + '\n', (self.baseIP, self.port))
+
             elif msgResult.group('CMD') == 'ENVAL':
                 if msgResult.group('QUERY'):
-                    reply = '[' + ', '.join(map(str, self.encoderVal)) + ']'
+                    reply = 'Hello from IR'
+                    # reply = '[' + ', '.join(map(str, self.encoderVal)) + ']'
                     print 'Sending: ' + reply
                     self.robotSocket.sendto(reply + '\n', (self.baseIP, self.port))
 
@@ -295,6 +309,10 @@ class QuickBot:
 
             elif msgResult.group('CMD') == 'DUMP':
                 self.dumpEncoderBuffer(LEFT)
+
+    def readIRValues(self):
+        for i in range(0,4):
+            self.irVal[i] = ADC.read_raw(self.irPin[i])
 
     def dumpEncoderBuffer(self, side):
         while self.encoderSerial[side].inWaiting() > 0:
