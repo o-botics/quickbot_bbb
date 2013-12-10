@@ -1,4 +1,9 @@
 #!/usr/bin/python
+"""
+@brief QuickBot class for Beaglebone Black
+
+@author Rowland O'Flaherty @date 08/27/2013
+"""
 
 import sys
 import time
@@ -152,32 +157,7 @@ class QuickBot:
     # Methods
     def run(self):
         # Turn off velocity output
-
-
-        # Kp = 0
-        # Ki = 0.05
-
-        # k = 100
-        # i = -1
-        # t = 0.
-        # dt = 0.
-        # dtBar = 0.1
-
-        # xBar = dtBar
-        # u = 0.
-        # x = 0.
-        # P = 1.
-        # y = xBar + u
-
-        # Phi = 1.
-        # H = 1.
-        # W = .00000001
-        # V = .00021035
-        # E = [0] * k
-
         while self.runFlag == True:
-            tStart = time.time()
-
             self.update()
             if self.ledFlag == True:
                 self.ledFlag = False
@@ -185,28 +165,6 @@ class QuickBot:
             else:
                 self.ledFlag = True
                 GPIO.output(self.ledPin, GPIO.LOW)
-
-            # # Stabilize sample time
-            # i = i + 1
-            # t = t + dt
-
-            # if i >= 1:
-            #     z = dt
-            #     (x, P, K, w, z, chi2) = kalman.filter(x, P, Phi, H, W, V, z)
-            #     e = xBar - x
-            #     if i < k-1:
-            #         E[i] = e
-            #         u = Kp*e + Ki*sum(E[0:i+1])
-            #     else:
-            #         E[i%k] = e
-            #         u = Kp*e + Ki*sum(E)
-
-            #     y = xBar + u
-
-            # time.sleep(y)
-            # dt = time.time() - tStart
-            # print dt
-            # print x
 
     def cleanup(self):
         self.setPWM([0, 0])
