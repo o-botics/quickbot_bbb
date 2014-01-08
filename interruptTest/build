@@ -1,0 +1,6 @@
+#!/bin/bash
+
+echo "Compiling the overlay from .dts to .dtbo"
+
+dtc -O dtb -o RO-INTR-TEST-00A0.dtbo -b 0 -@ RO-INTR-TEST.dts
+#dtc -O dtb -o BB-GPIO-KEYS-00A0.dtbo -b 0 -@ BB-GPIO-KEYS.dts
