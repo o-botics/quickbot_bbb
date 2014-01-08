@@ -1,0 +1,85 @@
+/dts-v1/;
+/plugin/;
+
+/ {
+    compatible = "ti,beaglebone", "ti,beaglebone-black";
+
+    /* identification */
+    part-number = "BB-GPIO-KEYS";
+    version = "00A0";
+
+    fragment@0 {
+        target = <&am33xx_pinmux>;
+        __overlay__ {
+            end_stop_pins: pinmux_end_stop_pins{
+                pinctrl-single,pins = <
+                    0x090 0x37 // P8_7  = End stop X1  = GPIO2_2
+                    0x070 0x37 // P9_11 = End stop Y1  = GPIO0_30
+                    0x074 0x3f // P9_13 = End stop Z1  = GPIO0_31
+                    0x158 0x37 // P9_18 = End stop Z2  = GPIO0_4
+                    0x1AC 0x37 // P9_25 = End stop Y2  = GPIO3_21
+                    0x180 0x37 // P9_26 = End stop X2  = GPIO0_14
+                >;
+            };
+        };
+    };
+
+    fragment@1 {
+        target = <&ocp>;
+        __overlay__ {            
+            #address-cells = <1>;
+            #size-cells = <1>;                            
+
+            gpio_keys {
+                compatible = "gpio-keys";
+                pinctrl-names = "default";
+                pinctrl-0 = <&end_stop_pins>;
+                #address-cells = <1>;
+                #size-cells = <0>;
+
+                switch_x1 {
+                    label = "End-stop-X1";
+                    debounce_interval = <50>;
+                    linux,code = <1>;
+                    gpios = <&gpio3 2 0x5>;
+                    gpio-key,wakeup;
+                };                
+                switch_x2 {
+                    label = "End-stop-X2";
+                    debounce_interval = <50>;
+                    linux,code = <2>;
+                    gpios = <&gpio1 14 0x5>;
+                    gpio-key,wakeup;
+                };
+                switch_y1 {
+                    label = "End-stop-Y1";
+                    debounce_interval = <50>;
+                    linux,code = <3>;
+                    gpios = <&gpio1 30 0x5>;
+                    gpio-key,wakeup;
+                };                
+                switch_y2 {
+                    label = "End-stop-Y2";
+                    debounce_interval = <50>;
+                    linux,code = <4>;
+                    gpios = <&gpio4 21 0x5>;
+                    gpio-key,wakeup;
+                };                
+                switch_z1 {
+                    label = "End-stop-Z1";
+                    debounce_interval = <50>;
+                    linux,code = <5>;
+                    gpios = <&gpio1 31 0x5>;
+                    gpio-key,wakeup;
+                };                
+                switch_z2 {
+                    label = "End-stop-Z2";
+                    debounce_interval = <50>;
+                    linux,code = <6>;
+                    gpios = <&gpio1 4 0x5>;
+                    gpio-key,wakeup;
+                };                
+            };
+        };
+    };
+};
