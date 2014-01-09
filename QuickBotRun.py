@@ -2,7 +2,8 @@
 """
 @brief Run QuickBot class for Beaglebone Black
 
-@author Rowland O'Flaherty @date 08/27/2013
+@author Rowland O'Flaherty 
+@date 08/27/2013
 """
 
 import sys
