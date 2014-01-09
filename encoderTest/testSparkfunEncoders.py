@@ -7,7 +7,7 @@ import Adafruit_BBIO.ADC as ADC
 LEFT = 0
 RIGHT = 1
 
-size = 3000
+size = 10000
 
 encoderPin = ('P9_39', 'P9_33')
 encoderVal = [0, 0]
