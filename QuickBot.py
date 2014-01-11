@@ -10,14 +10,13 @@ import sys
 import time
 import math
 import re
-import numpy as np
+# import numpy as np
 
 # import estimation.kalman as kalman
 
 import Adafruit_BBIO.GPIO as GPIO
 import Adafruit_BBIO.PWM as PWM
 import Adafruit_BBIO.ADC as ADC
-import serial
 import socket
 
 # Constants
@@ -48,18 +47,20 @@ class QuickBot:
 
     # === Class Properties ===
     # Parameters
-    sampleTime = 100.0 / 1000.0
+    sampleTime = 50.0 / 1000.0
 
     # Pins
     ledPin = 'USR1'
 
     # Motor Pins -- (LEFT, RIGHT)
-    dir1Pin = ('P8_10', 'P8_14')
-    dir2Pin = ('P8_12', 'P8_16')
+    dir1Pin = ('P8_12', 'P8_14')
+    dir2Pin = ('P8_10', 'P8_16')
     pwmPin = ('P9_14', 'P9_16')
 
     # ADC Pins
-    irPin = ('P9_39', 'P9_40', 'P9_37', 'P9_38', 'P9_35')
+    irPin = ('P9_35', 'P9_33', 'P9_40', 'P9_36', 'P9_38')
+    # irPin = ('P9_35', 'P9_33', 'P9_40', 'P9_36')
+    encoderPin = ('P9_37','P9_39')
 
     # State -- (LEFT, RIGHT)
     pwm = [0, 0]
@@ -74,7 +75,6 @@ class QuickBot:
     runFlag = True
     ledFlag = True
     cmdBuffer = ''
-    encoderBuffer = ['', '']
 
     # UDP
     baseIP = '192.168.7.1'
@@ -83,14 +83,6 @@ class QuickBot:
     port = 5005
     robotSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     robotSocket.setblocking(False)
-
-    # Serial
-    # TTYO1: Rx=P9_26  Tx=P9_24
-    # TTYO2: Rx=P9_22  Tx=P9_21
-    # TTYO4: Rx=P9_11  Tx=P9_13
-    # TTYO5: Rx=P9_38  Tx=P9_38
-    encoderSerial = (serial.Serial(port = '/dev/ttyO4', baudrate = 38400, timeout = .1), \
-                     serial.Serial(port = '/dev/ttyO2', baudrate = 38400, timeout = .1))
 
     # === Class Methods ===
     # Constructor
@@ -143,12 +135,12 @@ class QuickBot:
 
         # Right motor
         if self.pwm[RIGHT] > 0:
-            GPIO.output(self.dir1Pin[RIGHT], GPIO.HIGH)
-            GPIO.output(self.dir2Pin[RIGHT], GPIO.LOW)
-            PWM.set_duty_cycle(self.pwmPin[RIGHT], abs(self.pwm[RIGHT]))
-        elif self.pwm[RIGHT] < 0:
             GPIO.output(self.dir1Pin[RIGHT], GPIO.LOW)
             GPIO.output(self.dir2Pin[RIGHT], GPIO.HIGH)
+            PWM.set_duty_cycle(self.pwmPin[RIGHT], abs(self.pwm[RIGHT]))
+        elif self.pwm[RIGHT] < 0:
+            GPIO.output(self.dir1Pin[RIGHT], GPIO.HIGH)
+            GPIO.output(self.dir2Pin[RIGHT], GPIO.LOW)
             PWM.set_duty_cycle(self.pwmPin[RIGHT], abs(self.pwm[RIGHT]))
         else:
             GPIO.output(self.dir1Pin[RIGHT], GPIO.LOW)
@@ -157,9 +149,10 @@ class QuickBot:
 
     # Methods
     def run(self):
-        # Turn off velocity output
+        cnt = 0
         while self.runFlag == True:
             self.update()
+            # Flash BBB LED
             if self.ledFlag == True:
                 self.ledFlag = False
                 GPIO.output(self.ledPin, GPIO.HIGH)
@@ -170,31 +163,21 @@ class QuickBot:
     def cleanup(self):
         self.setPWM([0, 0])
         self.robotSocket.close()
-        self.encoderSerial[LEFT].close()
-        self.encoderSerial[RIGHT].close()
         GPIO.cleanup()
         PWM.cleanup()
 
     def update(self):
         self.readIRValues()
-
-        encoderUpdateFlag = False
-        encoderUpdateFlag = self.parseEncoderBuffer(LEFT)
-        encoderUpdateFlag = encoderUpdateFlag or self.parseEncoderBuffer(RIGHT)
+        self.readEncoderValues()
 
         self.parseCmdBuffer()
-
-        if (encoderUpdateFlag):
-            print 'Pos: [' + ', '.join(map(str, self.encoderVal)) + ']' + \
-              '\tVel: [' + ', '.join(map(str, self.encoderVel)) + ']' + \
-              '\tBuf: [' + str(self.encoderSerial[LEFT].inWaiting()) + ', ' + \
-              str(self.encoderSerial[RIGHT].inWaiting()) + ']'
 
     def parseCmdBuffer(self):
         try:
             line = self.robotSocket.recv(1024)
         except socket.error as msg:
-            line = ''
+            return
+        
         self.cmdBuffer += line
 
         bufferPattern = r'\$[^\$\*]*?\*' # String contained within $ and * symbols with no $ or * symbols in it
@@ -235,8 +218,7 @@ class QuickBot:
 
             elif msgResult.group('CMD') == 'ENVAL':
                 if msgResult.group('QUERY'):
-                    reply = 'Hello from IR'
-                    # reply = '[' + ', '.join(map(str, self.encoderVal)) + ']'
+                    reply = '[' + ', '.join(map(str, self.encoderVal)) + ']'
                     print 'Sending: ' + reply
                     self.robotSocket.sendto(reply + '\n', (self.baseIP, self.port))
 
@@ -266,45 +248,15 @@ class QuickBot:
                 print 'Quitting QuickBot run loop'
                 self.runFlag = False
 
-            elif msgResult.group('CMD') == 'DUMP':
-                self.dumpEncoderBuffer(LEFT)
-
     def readIRValues(self):
-        for i in range(0,4):
+        for i in range(0,len(self.irPin)):            
             self.irVal[i] = ADC.read_raw(self.irPin[i])
-
-    def dumpEncoderBuffer(self, side):
-        while self.encoderSerial[side].inWaiting() > 0:
-            print self.encoderSerial[side].readline()
-            print self.encoderSerial[side].inWaiting()
-
-    def parseEncoderBuffer(self, side):
-        encoderUpdateFlag = False
-
-        bytesInWaiting = self.encoderSerial[side].inWaiting()
-        if (bytesInWaiting > 0):
-            self.encoderBuffer[side] += self.encoderSerial[side].read(bytesInWaiting)
-
-            if len(self.encoderBuffer[side]) > 30:
-                self.encoderBuffer[side] = self.encoderBuffer[side][-30:]
-
-            if len(self.encoderBuffer[side]) >= 15:
-                DPattern = r'D([0-9A-F]{8})'
-                DRegex = re.compile(DPattern)
-                DResult = DRegex.findall(self.encoderBuffer[side])
-                if len(DResult) >= 1:
-                    val = convertHEXtoDEC(DResult[-1], 8)
-                    if not math.isnan(val):
-                        self.encoderVal[side] = val
-                        encoderUpdateFlag = True
-
-                VPattern = r'V([0-9A-F]{4})'
-                VRegex = re.compile(VPattern)
-                VResult = VRegex.findall(self.encoderBuffer[side])
-                if len(VResult) >= 1:
-                    vel = convertHEXtoDEC(VResult[-1], 4)
-                    if not math.isnan(vel):
-                        self.encoderVel[side] = vel
-                        encoderUpdateFlag = True
-
-            return encoderUpdateFlag
+            time.sleep(1.0/1000.0)
+            # print "IR " + str(i) + ": " + str(self.irVal[i])
+            
+    def readEncoderValues(self):
+        for i in range(0,len(self.encoderPin)):
+            self.encoderVal[i] = ADC.read_raw(self.encoderPin[i])
+            time.sleep(1.0/1000.0)
+            # print "ENC " + str(i) + ": " + str(self.irVal[i])
+        

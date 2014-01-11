@@ -34,10 +34,13 @@ class Encoder:
     
     # === Class Methods ===
     # Constructor
-    def __init__(self):
+    def __init__(self,pin):
         
         # Initialize ADC
         ADC.setup()
+        
+        # Set pin
+        self.pin = pin
 
     # Methods
     def run(self):
@@ -55,8 +58,9 @@ class Encoder:
     
     def sample(self):
         t = time.time() - self.t0
-        self.val = ADC.read(self.pin)
-        
+        self.val = ADC.read_raw(self.pin)
+        print "Pin " + self.pin + ": " + str(self.val)
+                
         cogPrev = self.cog
         if self.val >= self.threshold:
             self.cog = 1

@@ -1,16 +1,20 @@
 #!/usr/bin/python
 
 import os
+import sys
 import time
 import Adafruit_BBIO.ADC as ADC
 
-LEFT = 0
-RIGHT = 1
+size = 2000
 
-size = 10000
+if len(sys.argv) == 1:
+    encoderPin = 'P9_39'
+else:
+    encoderPin = str(sys.argv[1])
 
-encoderPin = ('P9_39', 'P9_33')
-encoderVal = [0, 0]
+print "Using pin: " + str(encoderPin)
+ 
+encoderVal = 0
 valList = [0] * size
 timeList = [0] * size
 
@@ -23,16 +27,10 @@ def run():
     cnt = 0
     while cnt < size:
         t = time.time() - t0
-        update()
-        valList[cnt] = encoderVal[LEFT]
+        valList[cnt] =  ADC.read_raw(encoderPin)
         timeList[cnt] = t
         cnt = cnt + 1
         time.sleep(0.001)
-
-def update():
-    encoderVal[LEFT] = ADC.read(encoderPin[LEFT])
-    # encoderVal[RIGHT] = ADC.read_raw(encoderPin[RIGHT])
-
 
 if __name__ == '__main__':
     run()

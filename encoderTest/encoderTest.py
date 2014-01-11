@@ -9,6 +9,6 @@ sys.path.append('..')
 from Encoder import *
 
 print "Running Encoder"
-
-e1 = Encoder()
+pin = 'P9_40'
+e1 = Encoder(pin)
 e1.run()
