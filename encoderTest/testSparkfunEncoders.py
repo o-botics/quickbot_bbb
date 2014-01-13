@@ -5,7 +5,7 @@ import sys
 import time
 import Adafruit_BBIO.ADC as ADC
 
-size = 2000
+size = 5000
 
 if len(sys.argv) == 1:
     encoderPin = 'P9_39'
