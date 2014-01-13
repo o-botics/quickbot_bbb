@@ -5,7 +5,7 @@
 @author Rowland O'Flaherty 
 @date 08/27/2013
 """
-
+import os
 import sys
 import time
 import math
@@ -27,10 +27,8 @@ RIGHT = 1
 MIN = 0
 MAX = 1
 
-ENC_LEFT_VAL = 0
-ENC_LEFT_VAL_LOCK = threading.Lock()
-ENC_RIGHT_VAL = 0
-ENC_RIGHT_VAL_LOCK = threading.Lock()
+ENC_VAL = [0, 0]
+ENC_VAL_LOCK = threading.Lock()
 ADC_LOCK = threading.Lock()
 RUN_FLAG = True
 RUN_FLAG_LOCK = threading.Lock()
@@ -120,9 +118,7 @@ class QuickBot():
         self.robotSocket.bind((self.robotIP, self.port))
         
         # Initialize encoders
-        self.encoder = []
-        self.encoder.append(Encoder(LEFT,self.encoderPin[LEFT]))
-        self.encoder.append(Encoder(RIGHT,self.encoderPin[RIGHT]))
+        self.encoders = Encoders(self.encoderPin)
 
     # Getters and Setters
     def setPWM(self, pwm):
@@ -163,8 +159,7 @@ class QuickBot():
     # Methods
     def run(self):
         global RUN_FLAG
-        self.encoder[LEFT].start()
-        #self.encoder[RIGHT].start()
+        self.encoders.start()
         
         while RUN_FLAG == True:
             self.update()
@@ -272,19 +267,19 @@ class QuickBot():
 
     def readIRValues(self):
         for i in range(0,len(self.irPin)):
-            # ADC_LOCK.acquire()
-            # self.irVal[i] = ADC.read_raw(self.irPin[i])
+            ADC_LOCK.acquire()
+            self.irVal[i] = ADC.read_raw(self.irPin[i])
             time.sleep(1.0/1000.0)
-            # ADC_LOCK.release()
+            ADC_LOCK.release()
             # print "IR " + str(i) + ": " + str(self.irVal[i])
             
     def readEncoderValues(self):
-        self.encoderVal[LEFT] = ENC_LEFT_VAL
-        self.encoderVal[RIGHT] = ENC_RIGHT_VAL
-        print "ENC_LEFT_VAL: " + str(ENC_LEFT_VAL) + "  ENC_RIGHT_VAL: " + str(ENC_RIGHT_VAL)
+        self.encoderVal[LEFT] = ENC_VAL[LEFT]
+        self.encoderVal[RIGHT] = ENC_VAL[RIGHT]
+        # print "ENC_LEFT_VAL: " + str(ENC_VAL[LEFT]) + "  ENC_RIGHT_VAL: " + str(ENC_VAL[RIGHT])
             
 
-class Encoder(threading.Thread):
+class Encoders(threading.Thread):
     """The Encoder Class"""
     
     # === Class Properties ===
@@ -294,91 +289,107 @@ class Encoder(threading.Thread):
     tickPerRev = 16
     
     # Encoder side
-    # side
     
     # ADC Pins
     # pin
     
     # State
     t0 = -1
-    t = -1
-    tPrev = -1
-    val = -1
-    cog = -1
-    tick = 0
-    dir = 1
-    pos = 0
-    vel = 0
+    t = 0
+    tickTime = [-1, -1]
+    tickPrevTime = [-1, -1]
+    val = [-1, -1]
+    cog = [-1, -1]
+    tick = [0, 0]
+    dir = [1, 1]
+    pos = [0, 0]
+    vel = [0, 0]
+    
+    size = 1000
+    
+    valLeftList = [0] * size
+    timeLeftList = [0] * size
+    valRightList = [0] * size
+    timeRightList = [0] * size
+    
     
     # === Class Methods ===
     # Constructor
-    def __init__(self,side=LEFT,pin='P9_39'):
+    def __init__(self,pin=('P9_39', 'P9_37')):
         
         # Initialize thread
         threading.Thread.__init__(self)
         
-        # Initialize ADC
-        ADC.setup()
-        
         # Set properties
         self.pin = pin
-        self.side = side
 
     # Methods
     def run(self):
         global RUN_FLAG
-        global ENC_LEFT_VAL
-        global ENC_RIGHT_VAL
+        global ENC_VAL
         cnt = 0
         self.t0 = time.time()
         
         while RUN_FLAG:
-            try:
-                self.sample()
-            except:
+            self.sample(LEFT)
+            self.valLeftList[cnt] = self.val[LEFT]
+            self.timeLeftList[cnt] = self.t
+            time.sleep(self.sampleTime)
+            
+            self.sample(RIGHT)
+            self.valRightList[cnt] = self.val[RIGHT]
+            self.timeRightList[cnt] = self.t
+            time.sleep(self.sampleTime)
+            
+            cnt = cnt + 1
+            if cnt == self.size:
+                print 'Quitting b/c ' + str(self.size) + ' updates occured'
                 RUN_FLAG_LOCK.acquire()
                 RUN_FLAG = False
                 RUN_FLAG_LOCK.release()
-                
-            if self.tick == 1:
-                if self.side == LEFT:
-                    print "Left hello"
-                    ENC_LEFT_VAL_LOCK.acquire()
-                    ENC_LEFT_VAL = ENC_LEFT_VAL + 1
-                    ENC_LEFT_VAL_LOCK.release()
-                else:
-                    print "Right hello"
-                    ENC_RIGHT_VAL_LOCK.acquire()
-                    ENC_RIGHT_VAL = ENC_RIGHT_VAL + 1
-                    ENC_RIGHT_VAL_LOCK.release()
-#                 print 'Time: ' + str(self.t) + \
-#                   '\tPos: ' + str(self.pos) + \
-#                   '\tVel: ' + str(self.vel)
-                
-            time.sleep(self.sampleTime)
-            
+        
+        # Write list to file       
+        matrix = map(list, zip(*[self.timeLeftList, self.valLeftList, self.timeRightList, self.valRightList]))
+        s = [[str(e) for e in row] for row in matrix]
+        lens = [len(max(col, key=len)) for col in zip(*s)]
+        fmt = '\t'.join('{{:{}}}'.format(x) for x in lens)
+        table = [fmt.format(*row) for row in s]
+        f = open('output.txt','w')
+        f.write('\n'.join(table))
+        f.close()
+        
         return
     
-    def sample(self):
-        t = time.time() - self.t0
+    def sample(self,side):
+        self.t = time.time() - self.t0
         ADC_LOCK.acquire()
-        self.val = ADC.read_raw(self.pin)
+        self.val[side] = ADC.read_raw(self.pin[side])
+        # print "Pin: " + self.pin[side] + " Val: " + str(self.val[side])
         ADC_LOCK.release()
-                
-        cogPrev = self.cog
-        if self.val >= self.threshold:
-            self.cog = 1
+        
+        cogPrev = self.cog[side]
+        if self.val[side] >= self.threshold:
+            self.cog[side] = 1
         else:
-            self.cog = 0
+            self.cog[side] = 0
          
-        if cogPrev == 0 and self.cog == 1:
+        if cogPrev == 0 and self.cog[side] == 1:
             # Tick
-            self.tick = 1
-            self.pos = self.pos + self.dir
-            if self.tPrev != -1:
-                self.vel = self.dir * (t - self.t)**(-1.0) / (self.tickPerRev)
-            self.tPrev = self.t
-            self.t = t
+            self.tick[side] = 1
+            self.tickPrevTime[side] = self.tickTime[side]
+            self.tickTime[side] = self.t
+            self.pos[side] = self.pos[side] + self.dir[side]
+            if self.tickPrevTime[side] != -1:
+                self.vel[side] = self.dir[side] * (self.tickTime[side] - self.tickPrevTime[side])**(-1.0) / (self.tickPerRev)
         else:
             # No Tick
-            self.tick = 0 
+            self.tick[side] = 0
+            
+#         if self.tick[side] == 1:
+#             ENC_VAL_LOCK.acquire()
+#             ENC_VAL[side] = ENC_VAL[side] + 1
+#             ENC_VAL_LOCK.release() 
+#             print 'Time: ' + str(self.t) + \
+#                   '\tPos: ' + str(self.pos) + \
+#                   '\tVel: ' + str(self.vel)
+
