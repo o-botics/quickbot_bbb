@@ -33,5 +33,5 @@ print '    Base IP: ', baseIP
 print '    Robot IP: ', robotIP
 
 QB = QuickBot(baseIP, robotIP)
-QB.start()
-QB.cleanup()
+QB.run()
+#QB.start()
