@@ -52,7 +52,7 @@ def convertHEXtoDEC(hexString, N):
             val = val - (1<<bits)
         return val
 
-class QuickBot(threading.Thread):
+class QuickBot():
     """The QuickBot Class"""
 
     # === Class Properties ===
@@ -96,9 +96,6 @@ class QuickBot(threading.Thread):
     # Constructor
     def __init__(self, baseIP, robotIP):
         
-        # Initialize thread
-        threading.Thread.__init__(self)
-        
         # Initialize GPIO pins
         GPIO.setup(self.dir1Pin[LEFT], GPIO.OUT)
         GPIO.setup(self.dir2Pin[LEFT], GPIO.OUT)
@@ -123,8 +120,9 @@ class QuickBot(threading.Thread):
         self.robotSocket.bind((self.robotIP, self.port))
         
         # Initialize encoders
-        #self.encoderLeft = Encoder(self.encoderPin[LEFT],LEFT)
-        #self.encoderRight = Encoder(self.encoderPin[RIGHT],RIGHT)
+        self.encoder = []
+        self.encoder.append(Encoder(LEFT,self.encoderPin[LEFT]))
+        self.encoder.append(Encoder(RIGHT,self.encoderPin[RIGHT]))
 
     # Getters and Setters
     def setPWM(self, pwm):
@@ -165,8 +163,8 @@ class QuickBot(threading.Thread):
     # Methods
     def run(self):
         global RUN_FLAG
-        #self.encoderLeft.start()
-        #self.encoderRight.start()
+        self.encoder[LEFT].start()
+        #self.encoder[RIGHT].start()
         
         while RUN_FLAG == True:
             self.update()
@@ -177,10 +175,11 @@ class QuickBot(threading.Thread):
             else:
                 self.ledFlag = True
                 GPIO.output(self.ledPin, GPIO.LOW)
-                
+        self.cleanup()        
         return
 
     def cleanup(self):
+        print "Clean up"
         self.setPWM([0, 0])
         self.robotSocket.close()
         GPIO.cleanup()
@@ -188,13 +187,13 @@ class QuickBot(threading.Thread):
 
     def update(self):
         #self.readIRValues()
-        #self.readEncoderValues()
+        self.readEncoderValues()
         self.parseCmdBuffer()
 
     def parseCmdBuffer(self):
+        global RUN_FLAG
         try:
             line = self.robotSocket.recv(1024)
-            print line
         except socket.error as msg:
             #print msg
             return
@@ -273,16 +272,16 @@ class QuickBot(threading.Thread):
 
     def readIRValues(self):
         for i in range(0,len(self.irPin)):
-            ADC_LOCK.acquire()
+            # ADC_LOCK.acquire()
             # self.irVal[i] = ADC.read_raw(self.irPin[i])
             time.sleep(1.0/1000.0)
-            ADC_LOCK.release()
+            # ADC_LOCK.release()
             # print "IR " + str(i) + ": " + str(self.irVal[i])
             
     def readEncoderValues(self):
         self.encoderVal[LEFT] = ENC_LEFT_VAL
         self.encoderVal[RIGHT] = ENC_RIGHT_VAL
-        #print "ENC_LEFT_VAL: " + str(ENC_LEFT_VAL) + "  ENC_RIGHT_VAL: " + str(ENC_RIGHT_VAL)
+        print "ENC_LEFT_VAL: " + str(ENC_LEFT_VAL) + "  ENC_RIGHT_VAL: " + str(ENC_RIGHT_VAL)
             
 
 class Encoder(threading.Thread):
@@ -313,7 +312,7 @@ class Encoder(threading.Thread):
     
     # === Class Methods ===
     # Constructor
-    def __init__(self,pin='P9_39',side=LEFT):
+    def __init__(self,side=LEFT,pin='P9_39'):
         
         # Initialize thread
         threading.Thread.__init__(self)
@@ -343,10 +342,12 @@ class Encoder(threading.Thread):
                 
             if self.tick == 1:
                 if self.side == LEFT:
+                    print "Left hello"
                     ENC_LEFT_VAL_LOCK.acquire()
                     ENC_LEFT_VAL = ENC_LEFT_VAL + 1
                     ENC_LEFT_VAL_LOCK.release()
                 else:
+                    print "Right hello"
                     ENC_RIGHT_VAL_LOCK.acquire()
                     ENC_RIGHT_VAL = ENC_RIGHT_VAL + 1
                     ENC_RIGHT_VAL_LOCK.release()
