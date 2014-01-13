@@ -10,20 +10,30 @@ import sys
 import time
 import math
 import re
-# import numpy as np
+import socket
+import threading
 
+# import numpy as np
 # import estimation.kalman as kalman
 
 import Adafruit_BBIO.GPIO as GPIO
 import Adafruit_BBIO.PWM as PWM
 import Adafruit_BBIO.ADC as ADC
-import socket
+
 
 # Constants
 LEFT = 0
 RIGHT = 1
 MIN = 0
 MAX = 1
+
+ENC_LEFT_VAL = 0
+ENC_LEFT_VAL_LOCK = threading.Lock()
+ENC_RIGHT_VAL = 0
+ENC_RIGHT_VAL_LOCK = threading.Lock()
+ADC_LOCK = threading.Lock()
+RUN_FLAG = True
+RUN_FLAG_LOCK = threading.Lock()
 
 def convertHEXtoDEC(hexString, N):
     # Return 2's compliment of hexString
@@ -42,7 +52,7 @@ def convertHEXtoDEC(hexString, N):
             val = val - (1<<bits)
         return val
 
-class QuickBot:
+class QuickBot(threading.Thread):
     """The QuickBot Class"""
 
     # === Class Properties ===
@@ -59,20 +69,18 @@ class QuickBot:
 
     # ADC Pins
     irPin = ('P9_35', 'P9_33', 'P9_40', 'P9_36', 'P9_38')
-    # irPin = ('P9_35', 'P9_33', 'P9_40', 'P9_36')
-    encoderPin = ('P9_37','P9_39')
+    encoderPin = ('P9_39','P9_37')
 
     # State -- (LEFT, RIGHT)
     pwm = [0, 0]
     irVal = [0, 0, 0, 0, 0]
-    encoderVal = [float('nan'), float('nan')]
-    encoderVel = [float('nan'), float('nan')]
+    encoderVal = [0, 0]
+    encoderVel = [0.0, 0.0]
 
     # Constraints
     pwmLimits = [-100, 100] # [min, max]
 
     # Variables
-    runFlag = True
     ledFlag = True
     cmdBuffer = ''
 
@@ -87,7 +95,10 @@ class QuickBot:
     # === Class Methods ===
     # Constructor
     def __init__(self, baseIP, robotIP):
-
+        
+        # Initialize thread
+        threading.Thread.__init__(self)
+        
         # Initialize GPIO pins
         GPIO.setup(self.dir1Pin[LEFT], GPIO.OUT)
         GPIO.setup(self.dir2Pin[LEFT], GPIO.OUT)
@@ -110,6 +121,10 @@ class QuickBot:
         self.baseIP = baseIP
         self.robotIP = robotIP
         self.robotSocket.bind((self.robotIP, self.port))
+        
+        # Initialize encoders
+        #self.encoderLeft = Encoder(self.encoderPin[LEFT],LEFT)
+        #self.encoderRight = Encoder(self.encoderPin[RIGHT],RIGHT)
 
     # Getters and Setters
     def setPWM(self, pwm):
@@ -149,8 +164,11 @@ class QuickBot:
 
     # Methods
     def run(self):
-        cnt = 0
-        while self.runFlag == True:
+        global RUN_FLAG
+        #self.encoderLeft.start()
+        #self.encoderRight.start()
+        
+        while RUN_FLAG == True:
             self.update()
             # Flash BBB LED
             if self.ledFlag == True:
@@ -159,6 +177,8 @@ class QuickBot:
             else:
                 self.ledFlag = True
                 GPIO.output(self.ledPin, GPIO.LOW)
+                
+        return
 
     def cleanup(self):
         self.setPWM([0, 0])
@@ -167,15 +187,16 @@ class QuickBot:
         PWM.cleanup()
 
     def update(self):
-        self.readIRValues()
-        self.readEncoderValues()
-
+        #self.readIRValues()
+        #self.readEncoderValues()
         self.parseCmdBuffer()
 
     def parseCmdBuffer(self):
         try:
             line = self.robotSocket.recv(1024)
+            print line
         except socket.error as msg:
+            #print msg
             return
         
         self.cmdBuffer += line
@@ -246,17 +267,117 @@ class QuickBot:
 
             elif msgResult.group('CMD') == 'END':
                 print 'Quitting QuickBot run loop'
-                self.runFlag = False
+                RUN_FLAG_LOCK.acquire()
+                RUN_FLAG = False
+                RUN_FLAG_LOCK.release()
 
     def readIRValues(self):
-        for i in range(0,len(self.irPin)):            
-            self.irVal[i] = ADC.read_raw(self.irPin[i])
+        for i in range(0,len(self.irPin)):
+            ADC_LOCK.acquire()
+            # self.irVal[i] = ADC.read_raw(self.irPin[i])
             time.sleep(1.0/1000.0)
+            ADC_LOCK.release()
             # print "IR " + str(i) + ": " + str(self.irVal[i])
             
     def readEncoderValues(self):
-        for i in range(0,len(self.encoderPin)):
-            self.encoderVal[i] = ADC.read_raw(self.encoderPin[i])
-            time.sleep(1.0/1000.0)
-            # print "ENC " + str(i) + ": " + str(self.irVal[i])
+        self.encoderVal[LEFT] = ENC_LEFT_VAL
+        self.encoderVal[RIGHT] = ENC_RIGHT_VAL
+        #print "ENC_LEFT_VAL: " + str(ENC_LEFT_VAL) + "  ENC_RIGHT_VAL: " + str(ENC_RIGHT_VAL)
+            
+
+class Encoder(threading.Thread):
+    """The Encoder Class"""
+    
+    # === Class Properties ===
+    # Parameters
+    sampleTime = 0.001
+    threshold = 1450
+    tickPerRev = 16
+    
+    # Encoder side
+    # side
+    
+    # ADC Pins
+    # pin
+    
+    # State
+    t0 = -1
+    t = -1
+    tPrev = -1
+    val = -1
+    cog = -1
+    tick = 0
+    dir = 1
+    pos = 0
+    vel = 0
+    
+    # === Class Methods ===
+    # Constructor
+    def __init__(self,pin='P9_39',side=LEFT):
         
+        # Initialize thread
+        threading.Thread.__init__(self)
+        
+        # Initialize ADC
+        ADC.setup()
+        
+        # Set properties
+        self.pin = pin
+        self.side = side
+
+    # Methods
+    def run(self):
+        global RUN_FLAG
+        global ENC_LEFT_VAL
+        global ENC_RIGHT_VAL
+        cnt = 0
+        self.t0 = time.time()
+        
+        while RUN_FLAG:
+            try:
+                self.sample()
+            except:
+                RUN_FLAG_LOCK.acquire()
+                RUN_FLAG = False
+                RUN_FLAG_LOCK.release()
+                
+            if self.tick == 1:
+                if self.side == LEFT:
+                    ENC_LEFT_VAL_LOCK.acquire()
+                    ENC_LEFT_VAL = ENC_LEFT_VAL + 1
+                    ENC_LEFT_VAL_LOCK.release()
+                else:
+                    ENC_RIGHT_VAL_LOCK.acquire()
+                    ENC_RIGHT_VAL = ENC_RIGHT_VAL + 1
+                    ENC_RIGHT_VAL_LOCK.release()
+#                 print 'Time: ' + str(self.t) + \
+#                   '\tPos: ' + str(self.pos) + \
+#                   '\tVel: ' + str(self.vel)
+                
+            time.sleep(self.sampleTime)
+            
+        return
+    
+    def sample(self):
+        t = time.time() - self.t0
+        ADC_LOCK.acquire()
+        self.val = ADC.read_raw(self.pin)
+        ADC_LOCK.release()
+                
+        cogPrev = self.cog
+        if self.val >= self.threshold:
+            self.cog = 1
+        else:
+            self.cog = 0
+         
+        if cogPrev == 0 and self.cog == 1:
+            # Tick
+            self.tick = 1
+            self.pos = self.pos + self.dir
+            if self.tPrev != -1:
+                self.vel = self.dir * (t - self.t)**(-1.0) / (self.tickPerRev)
+            self.tPrev = self.t
+            self.t = t
+        else:
+            # No Tick
+            self.tick = 0 
