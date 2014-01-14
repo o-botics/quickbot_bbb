@@ -13,9 +13,6 @@ import re
 import socket
 import threading
 
-# import numpy as np
-# import estimation.kalman as kalman
-
 import Adafruit_BBIO.GPIO as GPIO
 import Adafruit_BBIO.PWM as PWM
 import Adafruit_BBIO.ADC as ADC
@@ -29,6 +26,10 @@ MAX = 1
 
 ENC_VAL = [0, 0]
 ENC_VAL_LOCK = threading.Lock()
+ENC_VEL = [0, 0]
+ENC_VEL_LOCK = thread.Lock()
+ENC_DIR = [0, 0]
+ENC_DIR_LOCK = threading.Lock()
 ADC_LOCK = threading.Lock()
 RUN_FLAG = True
 RUN_FLAG_LOCK = threading.Lock()
@@ -122,6 +123,7 @@ class QuickBot():
 
     # Getters and Setters
     def setPWM(self, pwm):
+        global ENC_DIR
         # [leftSpeed, rightSpeed]: 0 is off, caps at min and max values
 
         self.pwm[LEFT] = min(max(pwm[LEFT], self.pwmLimits[MIN]), self.pwmLimits[MAX])
@@ -130,10 +132,16 @@ class QuickBot():
 
         # Left motor
         if self.pwm[LEFT] > 0:
+            ENC_DIR_LOCK.acquire()
+            ENC_DIR[LEFT] = 1
+            ENC_DIR_LOCK.release()
             GPIO.output(self.dir1Pin[LEFT], GPIO.LOW)
             GPIO.output(self.dir2Pin[LEFT], GPIO.HIGH)
             PWM.set_duty_cycle(self.pwmPin[LEFT], abs(self.pwm[LEFT]))
         elif self.pwm[LEFT] < 0:
+            ENC_DIR_LOCK.acquire()
+            ENC_DIR[LEFT] = -1
+            ENC_DIR_LOCK.release()
             GPIO.output(self.dir1Pin[LEFT], GPIO.HIGH)
             GPIO.output(self.dir2Pin[LEFT], GPIO.LOW)
             PWM.set_duty_cycle(self.pwmPin[LEFT], abs(self.pwm[LEFT]))
@@ -144,10 +152,16 @@ class QuickBot():
 
         # Right motor
         if self.pwm[RIGHT] > 0:
+            ENC_DIR_LOCK.acquire()
+            ENC_DIR[RIGHT] = 1
+            ENC_DIR_LOCK.release()
             GPIO.output(self.dir1Pin[RIGHT], GPIO.LOW)
             GPIO.output(self.dir2Pin[RIGHT], GPIO.HIGH)
             PWM.set_duty_cycle(self.pwmPin[RIGHT], abs(self.pwm[RIGHT]))
         elif self.pwm[RIGHT] < 0:
+            ENC_DIR_LOCK.acquire()
+            ENC_DIR[RIGHT] = -1
+            ENC_DIR_LOCK.release()
             GPIO.output(self.dir1Pin[RIGHT], GPIO.HIGH)
             GPIO.output(self.dir2Pin[RIGHT], GPIO.LOW)
             PWM.set_duty_cycle(self.pwmPin[RIGHT], abs(self.pwm[RIGHT]))
@@ -275,23 +289,22 @@ class QuickBot():
             
     def readEncoderValues(self):
         self.encoderVal[LEFT] = ENC_VAL[LEFT]
+        self.encoderVel[LEFT] = ENC_VEL[LEFT]
         self.encoderVal[RIGHT] = ENC_VAL[RIGHT]
-        # print "ENC_LEFT_VAL: " + str(ENC_VAL[LEFT]) + "  ENC_RIGHT_VAL: " + str(ENC_VAL[RIGHT])
+        self.encoderVel[RIGHT] = ENC_VEL[RIGHT]
+        print "ENC_LEFT_VAL: " + str(ENC_VAL[LEFT]) + "  ENC_LEFT_VEL: " + str(ENC_VEL[LEFT]) + \
+              "ENC_RIGHT_VAL: " + str(ENC_VAL[RIGHT]) + "  ENC_RIGHT_VEL: " + str(ENC_VEL[RIGHT])
             
 
 class Encoders(threading.Thread):
-    """The Encoder Class"""
+    """The Encoders Class"""
     
     # === Class Properties ===
     # Parameters
+    writeFlag = False
     sampleTime = 0.001
-    threshold = 1450
+    threshold = [1325, 1325]
     tickPerRev = 16
-    
-    # Encoder side
-    
-    # ADC Pins
-    # pin
     
     # State
     t0 = -1
@@ -300,17 +313,19 @@ class Encoders(threading.Thread):
     tickPrevTime = [-1, -1]
     val = [-1, -1]
     cog = [-1, -1]
-    tick = [0, 0]
-    dir = [1, 1]
     pos = [0, 0]
     vel = [0, 0]
     
-    size = 1000
-    
-    valLeftList = [0] * size
-    timeLeftList = [0] * size
-    valRightList = [0] * size
-    timeRightList = [0] * size
+    if writeFlag:
+        size = 1000
+          
+        timeLeftList = [0] * size
+        valLeftList = [0] * size
+        cogLeftList = [0] * size
+          
+        timeRightList = [0] * size
+        valRightList = [0] * size
+        cogRightList = [0] * size
     
     
     # === Class Methods ===
@@ -332,31 +347,30 @@ class Encoders(threading.Thread):
         
         while RUN_FLAG:
             self.sample(LEFT)
-            self.valLeftList[cnt] = self.val[LEFT]
-            self.timeLeftList[cnt] = self.t
+            if writeFlag:
+                self.timeLeftList[cnt] = self.t
+                self.valLeftList[cnt] = self.val[LEFT]
+                self.cogLeftList[cnt] = self.cog[LEFT]
+            
             time.sleep(self.sampleTime)
             
             self.sample(RIGHT)
-            self.valRightList[cnt] = self.val[RIGHT]
-            self.timeRightList[cnt] = self.t
+            if writeFlag:
+                self.timeRightList[cnt] = self.t
+                self.valRightList[cnt] = self.val[RIGHT]
+                self.cogRightList[cnt] = self.cog[RIGHT]
+                
+                cnt = cnt + 1
+                if cnt == self.size:
+                    print 'Quitting b/c ' + str(self.size) + ' updates occured'
+                    RUN_FLAG_LOCK.acquire()
+                    RUN_FLAG = False
+                    RUN_FLAG_LOCK.release()
+            
             time.sleep(self.sampleTime)
             
-            cnt = cnt + 1
-            if cnt == self.size:
-                print 'Quitting b/c ' + str(self.size) + ' updates occured'
-                RUN_FLAG_LOCK.acquire()
-                RUN_FLAG = False
-                RUN_FLAG_LOCK.release()
-        
-        # Write list to file       
-        matrix = map(list, zip(*[self.timeLeftList, self.valLeftList, self.timeRightList, self.valRightList]))
-        s = [[str(e) for e in row] for row in matrix]
-        lens = [len(max(col, key=len)) for col in zip(*s)]
-        fmt = '\t'.join('{{:{}}}'.format(x) for x in lens)
-        table = [fmt.format(*row) for row in s]
-        f = open('output.txt','w')
-        f.write('\n'.join(table))
-        f.close()
+        if writeFlag:
+            self.writeToFile()
         
         return
     
@@ -364,32 +378,39 @@ class Encoders(threading.Thread):
         self.t = time.time() - self.t0
         ADC_LOCK.acquire()
         self.val[side] = ADC.read_raw(self.pin[side])
-        # print "Pin: " + self.pin[side] + " Val: " + str(self.val[side])
         ADC_LOCK.release()
         
         cogPrev = self.cog[side]
-        if self.val[side] >= self.threshold:
+        if self.val[side] >= self.threshold[side]:
             self.cog[side] = 1
         else:
             self.cog[side] = 0
          
         if cogPrev == 0 and self.cog[side] == 1:
             # Tick
-            self.tick[side] = 1
+            dir = ENC_DIR[side]
             self.tickPrevTime[side] = self.tickTime[side]
             self.tickTime[side] = self.t
-            self.pos[side] = self.pos[side] + self.dir[side]
+            self.pos[side] = self.pos[side] + dir
             if self.tickPrevTime[side] != -1:
-                self.vel[side] = self.dir[side] * (self.tickTime[side] - self.tickPrevTime[side])**(-1.0) / (self.tickPerRev)
-        else:
-            # No Tick
-            self.tick[side] = 0
+                self.vel[side] = dir * (self.tickTime[side] - self.tickPrevTime[side])**(-1.0) / (self.tickPerRev)
+                
+            ENC_VAL_LOCK.acquire()
+            ENC_VAL[side] = self.pos[side]
+            ENC_VAL_LOCK.release()
+            ENC_VEL_LOCK.acquire()
+            ENC_VEL[side] = self.vel[side]
+            ENC_VEL_LOCK.release()
             
-#         if self.tick[side] == 1:
-#             ENC_VAL_LOCK.acquire()
-#             ENC_VAL[side] = ENC_VAL[side] + 1
-#             ENC_VAL_LOCK.release() 
-#             print 'Time: ' + str(self.t) + \
-#                   '\tPos: ' + str(self.pos) + \
-#                   '\tVel: ' + str(self.vel)
-
+            
+    def writeToFile(self):
+        matrix = map(list, zip(*[self.timeLeftList, self.valLeftList, self.cogLeftList, 
+                                 self.timeRightList, self.valRightList, self.cogRightList]))
+        s = [[str(e) for e in row] for row in matrix]
+        lens = [len(max(col, key=len)) for col in zip(*s)]
+        fmt = '\t'.join('{{:{}}}'.format(x) for x in lens)
+        table = [fmt.format(*row) for row in s]
+        f = open('output.txt','w')
+        f.write('\n'.join(table))
+        f.close()
+            

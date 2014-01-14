@@ -34,8 +34,6 @@ print '    Base IP: ', baseIP
 print '    Robot IP: ', robotIP
 
 QB = QuickBot(baseIP, robotIP)
-QB.setPWM([70,70])
-time.sleep(0.5)
-QB.setPWM([40, 40])
+# QB.setPWM([70,70])
 QB.run()
 #QB.start()
