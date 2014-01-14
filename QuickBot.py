@@ -27,10 +27,9 @@ MAX = 1
 ENC_VAL = [0, 0]
 ENC_VAL_LOCK = threading.Lock()
 ENC_VEL = [0, 0]
-ENC_VEL_LOCK = thread.Lock()
+ENC_VEL_LOCK = threading.Lock()
 ENC_DIR = [0, 0]
 ENC_DIR_LOCK = threading.Lock()
-ADC_LOCK = threading.Lock()
 RUN_FLAG = True
 RUN_FLAG_LOCK = threading.Lock()
 
@@ -195,7 +194,7 @@ class QuickBot():
         PWM.cleanup()
 
     def update(self):
-        #self.readIRValues()
+#         self.readIRValues()
         self.readEncoderValues()
         self.parseCmdBuffer()
 
@@ -281,10 +280,14 @@ class QuickBot():
 
     def readIRValues(self):
         for i in range(0,len(self.irPin)):
-            ADC_LOCK.acquire()
-            self.irVal[i] = ADC.read_raw(self.irPin[i])
-            time.sleep(1.0/1000.0)
-            ADC_LOCK.release()
+            readFlag =True
+            while readFlag:
+                try:
+                    self.irVal[i] = ADC.read_raw(self.irPin[i])
+                    readFlag = False
+                except:
+                    continue
+            
             # print "IR " + str(i) + ": " + str(self.irVal[i])
             
     def readEncoderValues(self):
@@ -292,8 +295,8 @@ class QuickBot():
         self.encoderVel[LEFT] = ENC_VEL[LEFT]
         self.encoderVal[RIGHT] = ENC_VAL[RIGHT]
         self.encoderVel[RIGHT] = ENC_VEL[RIGHT]
-        print "ENC_LEFT_VAL: " + str(ENC_VAL[LEFT]) + "  ENC_LEFT_VEL: " + str(ENC_VEL[LEFT]) + \
-              "ENC_RIGHT_VAL: " + str(ENC_VAL[RIGHT]) + "  ENC_RIGHT_VEL: " + str(ENC_VEL[RIGHT])
+#         print "ENC_LEFT_VAL: " + str(ENC_VAL[LEFT]) + "  ENC_LEFT_VEL: " + str(ENC_VEL[LEFT]) + \
+#               " ENC_RIGHT_VAL: " + str(ENC_VAL[RIGHT]) + "  ENC_RIGHT_VEL: " + str(ENC_VEL[RIGHT])
             
 
 class Encoders(threading.Thread):
@@ -347,7 +350,8 @@ class Encoders(threading.Thread):
         
         while RUN_FLAG:
             self.sample(LEFT)
-            if writeFlag:
+            
+            if self.writeFlag:
                 self.timeLeftList[cnt] = self.t
                 self.valLeftList[cnt] = self.val[LEFT]
                 self.cogLeftList[cnt] = self.cog[LEFT]
@@ -355,11 +359,15 @@ class Encoders(threading.Thread):
             time.sleep(self.sampleTime)
             
             self.sample(RIGHT)
-            if writeFlag:
+            
+            if self.writeFlag:
                 self.timeRightList[cnt] = self.t
                 self.valRightList[cnt] = self.val[RIGHT]
                 self.cogRightList[cnt] = self.cog[RIGHT]
                 
+            time.sleep(self.sampleTime)
+                
+            if self.writeFlag:
                 cnt = cnt + 1
                 if cnt == self.size:
                     print 'Quitting b/c ' + str(self.size) + ' updates occured'
@@ -367,18 +375,25 @@ class Encoders(threading.Thread):
                     RUN_FLAG = False
                     RUN_FLAG_LOCK.release()
             
-            time.sleep(self.sampleTime)
             
-        if writeFlag:
+            
+        if self.writeFlag:
             self.writeToFile()
         
         return
     
     def sample(self,side):
         self.t = time.time() - self.t0
-        ADC_LOCK.acquire()
         self.val[side] = ADC.read_raw(self.pin[side])
-        ADC_LOCK.release()
+        
+#         readFlag =True
+#         while readFlag:
+#             try:
+#                 self.t = time.time() - self.t0
+#                 self.val[side] = ADC.read_raw(self.pin[side])
+#                 readFlag = False
+#             except:
+#                 continue
         
         cogPrev = self.cog[side]
         if self.val[side] >= self.threshold[side]:
