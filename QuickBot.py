@@ -24,38 +24,31 @@ RIGHT = 1
 MIN = 0
 MAX = 1
 
+ADCTIME = 0.001
+
+DTIME = 0
+DTIME_LOCK = threading.Lock()
+
+IR_TIME = [0, 0, 0, 0, 0]
+IR_VAL = [0, 0, 0, 0, 0]
+IR_LOCK = threading.Lock()
+
+ENC_TIME = [0, 0]
 ENC_VAL = [0, 0]
-ENC_VAL_LOCK = threading.Lock()
-ENC_VEL = [0, 0]
-ENC_VEL_LOCK = threading.Lock()
+
+ADC_LOCK = threading.Lock()
+
 ENC_DIR = [0, 0]
 ENC_DIR_LOCK = threading.Lock()
 RUN_FLAG = True
 RUN_FLAG_LOCK = threading.Lock()
-
-def convertHEXtoDEC(hexString, N):
-    # Return 2's compliment of hexString
-    for hexChar in hexString:
-        asciiNum = ord(hexChar)
-        if not ((asciiNum >= 48 and asciiNum <= 57) or \
-             (asciiNum >= 65 and asciiNum <= 70) or \
-             (asciiNum >= 97 and asciiNum <= 102)):
-             val = float('nan')
-             return val
-
-    if len(hexString) == N:
-        val = int(hexString, 16)
-        bits = 4*len(hexString)
-        if  (val & (1<<(bits-1))) != 0:
-            val = val - (1<<bits)
-        return val
 
 class QuickBot():
     """The QuickBot Class"""
 
     # === Class Properties ===
     # Parameters
-    sampleTime = 50.0 / 1000.0
+    sampleTime = 25.0 / 1000.0
 
     # Pins
     ledPin = 'USR1'
@@ -74,6 +67,7 @@ class QuickBot():
     irVal = [0, 0, 0, 0, 0]
     encoderVal = [0, 0]
     encoderVel = [0.0, 0.0]
+    ithIR = 0
 
     # Constraints
     pwmLimits = [-100, 100] # [min, max]
@@ -111,14 +105,12 @@ class QuickBot():
 
         # Initialize ADC
         ADC.setup()
+        self.encoderRead = encoderRead(self.encoderPin)
 
         # Set IP addresses
         self.baseIP = baseIP
         self.robotIP = robotIP
         self.robotSocket.bind((self.robotIP, self.port))
-        
-        # Initialize encoders
-        self.encoders = Encoders(self.encoderPin)
 
     # Getters and Setters
     def setPWM(self, pwm):
@@ -172,10 +164,13 @@ class QuickBot():
     # Methods
     def run(self):
         global RUN_FLAG
-        self.encoders.start()
+        self.EncoderRead.start()
         
         while RUN_FLAG == True:
             self.update()
+            
+            print "Time: " + str(DTIME)
+            
             # Flash BBB LED
             if self.ledFlag == True:
                 self.ledFlag = False
@@ -183,6 +178,7 @@ class QuickBot():
             else:
                 self.ledFlag = True
                 GPIO.output(self.ledPin, GPIO.LOW)
+            time.sleep(self.sampleTime)
         self.cleanup()        
         return
 
@@ -194,7 +190,7 @@ class QuickBot():
         PWM.cleanup()
 
     def update(self):
-#         self.readIRValues()
+        self.readIRValues()
         self.readEncoderValues()
         self.parseCmdBuffer()
 
@@ -279,25 +275,69 @@ class QuickBot():
                 RUN_FLAG_LOCK.release()
 
     def readIRValues(self):
-        for i in range(0,len(self.irPin)):
-            readFlag =True
-            while readFlag:
-                try:
-                    self.irVal[i] = ADC.read_raw(self.irPin[i])
-                    readFlag = False
-                except:
-                    continue
-            
-            # print "IR " + str(i) + ": " + str(self.irVal[i])
+        prevVal = self.irVal[self.ithIR]
+        ADC_LOCK.acquire()
+        self.irVal[self.ithIR] = ADC.read_raw(self.irPin[self.ithIR])
+        time.sleep(ADCTIME)
+        ADC_LOCK.release()
+        
+        if self.irVal[self.ithIR] >= 1000:
+                self.irVal[self.ithIR] = prevVal
+        
+#         if self.ithIR == 4:
+#             print "IR " + str(self.ithIR) + ": " + str(self.irVal[self.ithIR])
+        
+        self.ithIR = ((self.ithIR+1) % 5)
+        
             
     def readEncoderValues(self):
         self.encoderVal[LEFT] = ENC_VAL[LEFT]
-        self.encoderVel[LEFT] = ENC_VEL[LEFT]
         self.encoderVal[RIGHT] = ENC_VAL[RIGHT]
-        self.encoderVel[RIGHT] = ENC_VEL[RIGHT]
-#         print "ENC_LEFT_VAL: " + str(ENC_VAL[LEFT]) + "  ENC_LEFT_VEL: " + str(ENC_VEL[LEFT]) + \
-#               " ENC_RIGHT_VAL: " + str(ENC_VAL[RIGHT]) + "  ENC_RIGHT_VEL: " + str(ENC_VEL[RIGHT])
+        
+        print "ENC_LEFT_VAL: " + str(ENC_VAL[LEFT]) + " ENC_RIGHT_VAL: " + str(ENC_VAL[RIGHT])
             
+
+class encoderRead(threading.Thread):
+    """The encoderRead Class"""
+    
+    # === Class Properties ===
+    # Parameters
+    
+    # === Class Methods ===
+    # Constructor
+    def __init__(self,encPin=('P9_39', 'P9_37')):
+        
+        # Initialize thread
+        threading.Thread.__init__(self)
+        
+        # Set properties
+        self.encPin = encPin
+        
+    # Methods
+    def run(self):
+        global RUN_FLAG
+        global DTIME
+        
+        self.t0 = time.time()
+        while RUN_FLAG:
+            tStart = time.time()
+            self.sample()
+            tEnd = time.time()
+            DTIME_LOCK.acquire()
+            DTIME = tEnd - tStart
+            DTIME_LOCK.release()
+            
+    def sample(self):
+        global ENC_TIME
+        global ENC_VAL
+        
+        for i in range(0,2): 
+            ENC_TIME[i] = time.time() - self.t0
+            ADC_LOCK.acquire()
+            ENC_VAL[i] = ADC.read_raw(self.encPin[i])
+            time.sleep(ADCTIME)
+            ADC_LOCK.release()
+        
 
 class Encoders(threading.Thread):
     """The Encoders Class"""
