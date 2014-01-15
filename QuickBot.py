@@ -29,12 +29,15 @@ ADCTIME = 0.001
 DTIME = 0
 DTIME_LOCK = threading.Lock()
 
-IR_TIME = [0, 0, 0, 0, 0]
-IR_VAL = [0, 0, 0, 0, 0]
-IR_LOCK = threading.Lock()
+ENC_BUF_SIZE = 100
 
-ENC_TIME = [0, 0]
-ENC_VAL = [0, 0]
+ENC_IND_LEFT = 0
+ENC_TIME_LEFT = [0]*ENC_BUF_SIZE
+ENC_VAL_LEFT = [0]*ENC_BUF_SIZE
+
+ENC_IND_RIGHT = 0
+ENC_TIME_RIGHT = [0]*ENC_BUF_SIZE
+ENC_VAL_RIGHT = [0]*ENC_BUF_SIZE
 
 ADC_LOCK = threading.Lock()
 
@@ -164,7 +167,7 @@ class QuickBot():
     # Methods
     def run(self):
         global RUN_FLAG
-        self.EncoderRead.start()
+        self.encoderRead.start()
         
         while RUN_FLAG == True:
             self.update()
@@ -291,10 +294,10 @@ class QuickBot():
         
             
     def readEncoderValues(self):
-        self.encoderVal[LEFT] = ENC_VAL[LEFT]
-        self.encoderVal[RIGHT] = ENC_VAL[RIGHT]
+        self.encoderVal[LEFT] = ENC_VAL_LEFT[ENC_IND_LEFT]
+        self.encoderVal[RIGHT] = ENC_VAL_RIGHT[ENC_IND_RIGHT]
         
-        print "ENC_LEFT_VAL: " + str(ENC_VAL[LEFT]) + " ENC_RIGHT_VAL: " + str(ENC_VAL[RIGHT])
+        print "ENC_LEFT_VAL: " + str(self.encoderVal[LEFT]) + " ENC_RIGHT_VAL: " + str(self.encoderVal[RIGHT])
             
 
 class encoderRead(threading.Thread):
@@ -327,17 +330,29 @@ class encoderRead(threading.Thread):
             DTIME = tEnd - tStart
             DTIME_LOCK.release()
             
-    def sample(self):
-        global ENC_TIME
-        global ENC_VAL
+    def sample(self):        
+        global ENC_IND_LEFT
+        global ENC_TIME_LEFT
+        global ENC_VAL_LEFT
+
+        global ENC_IND_RIGHT
+        global ENC_TIME_RIGHT
+        global ENC_VAL_RIGHT
         
-        for i in range(0,2): 
-            ENC_TIME[i] = time.time() - self.t0
-            ADC_LOCK.acquire()
-            ENC_VAL[i] = ADC.read_raw(self.encPin[i])
-            time.sleep(ADCTIME)
-            ADC_LOCK.release()
         
+        ENC_TIME_LEFT[ENC_IND_LEFT] = time.time() - self.t0
+        ADC_LOCK.acquire()
+        ENC_VAL_LEFT[ENC_IND_LEFT] = ADC.read_raw(self.encPin[LEFT])
+        time.sleep(ADCTIME)
+        ADC_LOCK.release()
+        ENC_IND_LEFT = (ENC_IND_LEFT + 1) % ENC_BUF_SIZE
+        
+        ENC_TIME_RIGHT[ENC_IND_RIGHT] = time.time() - self.t0
+        ADC_LOCK.acquire()
+        ENC_VAL_RIGHT[ENC_IND_RIGHT] = ADC.read_raw(self.encPin[RIGHT])
+        time.sleep(ADCTIME)
+        ADC_LOCK.release()
+        ENC_IND_RIGHT = (ENC_IND_RIGHT + 1) % ENC_BUF_SIZE    
 
 class Encoders(threading.Thread):
     """The Encoders Class"""
