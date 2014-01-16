@@ -48,7 +48,7 @@ class QuickBot():
 
     # === Class Properties ===
     # Parameters
-    sampleTime = 50.0 / 1000.0
+    sampleTime = 25.0 / 1000.0
 
     # Pins
     ledPin = 'USR1'
@@ -70,6 +70,7 @@ class QuickBot():
     
     encoderVal = [0, 0]
     encoderVel = [0.0, 0.0]
+    encBuf = [[0]*ENC_BUF_SIZE, [0]*ENC_BUF_SIZE]
     encBufInd0 = [0, 0]
     encBufInd1 = [0, 0]    
 
@@ -300,11 +301,25 @@ class QuickBot():
         
             
     def readEncoderValues(self):
+        # LEFT side fill buffer
         self.encBufInd0[LEFT] = self.encBufInd1[LEFT]
-        self.encBufInd0[RIGHT] = self.encBufInd1[RIGHT]
         self.encBufInd1[LEFT] = ENC_IND_LEFT
+        if self.encBufInd0[LEFT] < self.encBufInd1[LEFT]:
+            self.encBuf[LEFT][self.encBufInd0[LEFT]:self.encBufInd1[LEFT]+1] = ENC_VAL_LEFT[self.encBufInd0[LEFT]:self.encBufInd1[LEFT]+1]
+        else:
+            self.encBuf[LEFT][self.encBufInd0[LEFT]:ENC_BUF_SIZE] = ENC_VAL_LEFT[self.encBufInd0[LEFT]:ENC_BUF_SIZE]
+            self.encBuf[LEFT][0:self.encBufInd1[LEFT]+1] = ENC_VAL_LEFT[0:self.encBufInd1[LEFT]+1]
+          
+        # RIGHT side fill buffer
+        self.encBufInd0[RIGHT] = self.encBufInd1[RIGHT]
         self.encBufInd1[RIGHT] = ENC_IND_RIGHT
-        
+        if self.encBufInd0[RIGHT] < self.encBufInd1[RIGHT]:
+            self.encBuf[RIGHT][self.encBufInd0[RIGHT]:self.encBufInd1[RIGHT]+1] = ENC_VAL_RIGHT[self.encBufInd0[RIGHT]:self.encBufInd1[RIGHT]+1]
+        else:
+            self.encBuf[RIGHT][self.encBufInd0[RIGHT]:ENC_BUF_SIZE] = ENC_VAL_RIGHT[self.encBufInd0[RIGHT]:ENC_BUF_SIZE]
+            self.encBuf[RIGHT][0:self.encBufInd1[RIGHT]+1] = ENC_VAL_RIGHT[0:self.encBufInd1[RIGHT]+1]
+            
+            
         print "LEFT: " + str(self.encBufInd1[LEFT] - self.encBufInd0[LEFT]) + \
             " RIGHT: " + str(self.encBufInd1[RIGHT] - self.encBufInd0[RIGHT])
 #         self.encoderVal[LEFT] = ENC_VAL_LEFT[ENC_IND_LEFT]
