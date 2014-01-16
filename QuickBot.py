@@ -24,12 +24,9 @@ RIGHT = 1
 MIN = 0
 MAX = 1
 
-ADCTIME = 0.001
+ADCTIME = 0.00075
 
-DTIME = 0
-DTIME_LOCK = threading.Lock()
-
-ENC_BUF_SIZE = 100
+ENC_BUF_SIZE = 512
 
 ENC_IND_LEFT = 0
 ENC_TIME_LEFT = [0]*ENC_BUF_SIZE
@@ -51,7 +48,7 @@ class QuickBot():
 
     # === Class Properties ===
     # Parameters
-    sampleTime = 25.0 / 1000.0
+    sampleTime = 50.0 / 1000.0
 
     # Pins
     ledPin = 'USR1'
@@ -67,10 +64,14 @@ class QuickBot():
 
     # State -- (LEFT, RIGHT)
     pwm = [0, 0]
+    
     irVal = [0, 0, 0, 0, 0]
+    ithIR = 0
+    
     encoderVal = [0, 0]
     encoderVel = [0.0, 0.0]
-    ithIR = 0
+    encBufInd0 = [0, 0]
+    encBufInd1 = [0, 0]    
 
     # Constraints
     pwmLimits = [-100, 100] # [min, max]
@@ -170,10 +171,10 @@ class QuickBot():
         self.encoderRead.start()
         
         while RUN_FLAG == True:
+            tStart = time.time()
+
             self.update()
-            
-            print "Time: " + str(DTIME)
-            
+             
             # Flash BBB LED
             if self.ledFlag == True:
                 self.ledFlag = False
@@ -182,6 +183,10 @@ class QuickBot():
                 self.ledFlag = True
                 GPIO.output(self.ledPin, GPIO.LOW)
             time.sleep(self.sampleTime)
+            
+            tEnd = time.time()            
+            print("Time: ") + str(tEnd - tStart)            
+            
         self.cleanup()        
         return
 
@@ -191,6 +196,7 @@ class QuickBot():
         self.robotSocket.close()
         GPIO.cleanup()
         PWM.cleanup()
+        self.writeBufferToFile()
 
     def update(self):
         self.readIRValues()
@@ -294,10 +300,29 @@ class QuickBot():
         
             
     def readEncoderValues(self):
-        self.encoderVal[LEFT] = ENC_VAL_LEFT[ENC_IND_LEFT]
-        self.encoderVal[RIGHT] = ENC_VAL_RIGHT[ENC_IND_RIGHT]
+        self.encBufInd0[LEFT] = self.encBufInd1[LEFT]
+        self.encBufInd0[RIGHT] = self.encBufInd1[RIGHT]
+        self.encBufInd1[LEFT] = ENC_IND_LEFT
+        self.encBufInd1[RIGHT] = ENC_IND_RIGHT
         
-        print "ENC_LEFT_VAL: " + str(self.encoderVal[LEFT]) + " ENC_RIGHT_VAL: " + str(self.encoderVal[RIGHT])
+        print "LEFT: " + str(self.encBufInd1[LEFT] - self.encBufInd0[LEFT]) + \
+            " RIGHT: " + str(self.encBufInd1[RIGHT] - self.encBufInd0[RIGHT])
+#         self.encoderVal[LEFT] = ENC_VAL_LEFT[ENC_IND_LEFT]
+#         self.encoderVal[RIGHT] = ENC_VAL_RIGHT[ENC_IND_RIGHT]
+        
+#         print "ENC_LEFT_VAL: " + str(self.encoderVal[LEFT]) + " ENC_RIGHT_VAL: " + str(self.encoderVal[RIGHT])
+        
+    def writeBufferToFile(self):
+        matrix = map(list, zip(*[ENC_TIME_LEFT, ENC_VAL_LEFT, 
+                                 ENC_TIME_RIGHT, ENC_VAL_RIGHT]))
+        s = [[str(e) for e in row] for row in matrix]
+        lens = [len(max(col, key=len)) for col in zip(*s)]
+        fmt = '\t'.join('{{:{}}}'.format(x) for x in lens)
+        table = [fmt.format(*row) for row in s]
+        f = open('output.txt','w')
+        f.write('\n'.join(table))
+        f.close()
+        print "Wrote buffer to output.txt"
             
 
 class encoderRead(threading.Thread):
@@ -319,41 +344,32 @@ class encoderRead(threading.Thread):
     # Methods
     def run(self):
         global RUN_FLAG
-        global DTIME
         
         self.t0 = time.time()
         while RUN_FLAG:
-            tStart = time.time()
-            self.sample()
-            tEnd = time.time()
-            DTIME_LOCK.acquire()
-            DTIME = tEnd - tStart
-            DTIME_LOCK.release()
+            global ENC_IND_LEFT
+            global ENC_TIME_LEFT
+            global ENC_VAL_LEFT
+    
+            global ENC_IND_RIGHT
+            global ENC_TIME_RIGHT
+            global ENC_VAL_RIGHT
             
-    def sample(self):        
-        global ENC_IND_LEFT
-        global ENC_TIME_LEFT
-        global ENC_VAL_LEFT
+            ENC_TIME_LEFT[ENC_IND_LEFT] = time.time() - self.t0
+            ADC_LOCK.acquire()
+            ENC_VAL_LEFT[ENC_IND_LEFT] = ADC.read_raw(self.encPin[LEFT])
+            time.sleep(ADCTIME)
+            ADC_LOCK.release()
+            ENC_IND_LEFT = (ENC_IND_LEFT + 1) % ENC_BUF_SIZE
+            
+            ENC_TIME_RIGHT[ENC_IND_RIGHT] = time.time() - self.t0
+            ADC_LOCK.acquire()
+            ENC_VAL_RIGHT[ENC_IND_RIGHT] = ADC.read_raw(self.encPin[RIGHT])
+            time.sleep(ADCTIME)
+            ADC_LOCK.release()
+            ENC_IND_RIGHT = (ENC_IND_RIGHT + 1) % ENC_BUF_SIZE
 
-        global ENC_IND_RIGHT
-        global ENC_TIME_RIGHT
-        global ENC_VAL_RIGHT
-        
-        
-        ENC_TIME_LEFT[ENC_IND_LEFT] = time.time() - self.t0
-        ADC_LOCK.acquire()
-        ENC_VAL_LEFT[ENC_IND_LEFT] = ADC.read_raw(self.encPin[LEFT])
-        time.sleep(ADCTIME)
-        ADC_LOCK.release()
-        ENC_IND_LEFT = (ENC_IND_LEFT + 1) % ENC_BUF_SIZE
-        
-        ENC_TIME_RIGHT[ENC_IND_RIGHT] = time.time() - self.t0
-        ADC_LOCK.acquire()
-        ENC_VAL_RIGHT[ENC_IND_RIGHT] = ADC.read_raw(self.encPin[RIGHT])
-        time.sleep(ADCTIME)
-        ADC_LOCK.release()
-        ENC_IND_RIGHT = (ENC_IND_RIGHT + 1) % ENC_BUF_SIZE    
-
+            
 class Encoders(threading.Thread):
     """The Encoders Class"""
     
