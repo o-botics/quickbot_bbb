@@ -24,22 +24,16 @@ RIGHT = 1
 MIN = 0
 MAX = 1
 
-ADCTIME = 0.00075
+ADCTIME = 0.001
 
-ENC_BUF_SIZE = 512
+ENC_BUF_SIZE = 2**13
 
-ENC_IND_LEFT = 0
-ENC_TIME_LEFT = [0]*ENC_BUF_SIZE
-ENC_VAL_LEFT = [0]*ENC_BUF_SIZE
-
-ENC_IND_RIGHT = 0
-ENC_TIME_RIGHT = [0]*ENC_BUF_SIZE
-ENC_VAL_RIGHT = [0]*ENC_BUF_SIZE
+ENC_IND = [0, 0]
+ENC_TIME = [[0]*ENC_BUF_SIZE, [0]*ENC_BUF_SIZE]
+ENC_VAL = [[0]*ENC_BUF_SIZE, [0]*ENC_BUF_SIZE]
 
 ADC_LOCK = threading.Lock()
 
-ENC_DIR = [0, 0]
-ENC_DIR_LOCK = threading.Lock()
 RUN_FLAG = True
 RUN_FLAG_LOCK = threading.Lock()
 
@@ -70,9 +64,12 @@ class QuickBot():
     
     encoderVal = [0, 0]
     encoderVel = [0.0, 0.0]
-    encBuf = [[0]*ENC_BUF_SIZE, [0]*ENC_BUF_SIZE]
+    encTimeBuf = [[0]*ENC_BUF_SIZE, [0]*ENC_BUF_SIZE]
+    encValBuf = [[0]*ENC_BUF_SIZE, [0]*ENC_BUF_SIZE]
+    encPWMBuf = [[0]*ENC_BUF_SIZE, [0]*ENC_BUF_SIZE]
+    encNNewBuf = [[0]*ENC_BUF_SIZE, [0]*ENC_BUF_SIZE]
     encBufInd0 = [0, 0]
-    encBufInd1 = [0, 0]    
+    encBufInd1 = [0, 0]
 
     # Constraints
     pwmLimits = [-100, 100] # [min, max]
@@ -128,16 +125,10 @@ class QuickBot():
 
         # Left motor
         if self.pwm[LEFT] > 0:
-            ENC_DIR_LOCK.acquire()
-            ENC_DIR[LEFT] = 1
-            ENC_DIR_LOCK.release()
             GPIO.output(self.dir1Pin[LEFT], GPIO.LOW)
             GPIO.output(self.dir2Pin[LEFT], GPIO.HIGH)
             PWM.set_duty_cycle(self.pwmPin[LEFT], abs(self.pwm[LEFT]))
         elif self.pwm[LEFT] < 0:
-            ENC_DIR_LOCK.acquire()
-            ENC_DIR[LEFT] = -1
-            ENC_DIR_LOCK.release()
             GPIO.output(self.dir1Pin[LEFT], GPIO.HIGH)
             GPIO.output(self.dir2Pin[LEFT], GPIO.LOW)
             PWM.set_duty_cycle(self.pwmPin[LEFT], abs(self.pwm[LEFT]))
@@ -148,16 +139,10 @@ class QuickBot():
 
         # Right motor
         if self.pwm[RIGHT] > 0:
-            ENC_DIR_LOCK.acquire()
-            ENC_DIR[RIGHT] = 1
-            ENC_DIR_LOCK.release()
             GPIO.output(self.dir1Pin[RIGHT], GPIO.LOW)
             GPIO.output(self.dir2Pin[RIGHT], GPIO.HIGH)
             PWM.set_duty_cycle(self.pwmPin[RIGHT], abs(self.pwm[RIGHT]))
         elif self.pwm[RIGHT] < 0:
-            ENC_DIR_LOCK.acquire()
-            ENC_DIR[RIGHT] = -1
-            ENC_DIR_LOCK.release()
             GPIO.output(self.dir1Pin[RIGHT], GPIO.HIGH)
             GPIO.output(self.dir2Pin[RIGHT], GPIO.LOW)
             PWM.set_duty_cycle(self.pwmPin[RIGHT], abs(self.pwm[RIGHT]))
@@ -186,7 +171,7 @@ class QuickBot():
             time.sleep(self.sampleTime)
             
             tEnd = time.time()            
-            print("Time: ") + str(tEnd - tStart)            
+#             print("Time: ") + str(tEnd - tStart)         
             
         self.cleanup()        
         return
@@ -301,35 +286,38 @@ class QuickBot():
         
             
     def readEncoderValues(self):
-        # LEFT side fill buffer
-        self.encBufInd0[LEFT] = self.encBufInd1[LEFT]
-        self.encBufInd1[LEFT] = ENC_IND_LEFT
-        if self.encBufInd0[LEFT] < self.encBufInd1[LEFT]:
-            self.encBuf[LEFT][self.encBufInd0[LEFT]:self.encBufInd1[LEFT]+1] = ENC_VAL_LEFT[self.encBufInd0[LEFT]:self.encBufInd1[LEFT]+1]
-        else:
-            self.encBuf[LEFT][self.encBufInd0[LEFT]:ENC_BUF_SIZE] = ENC_VAL_LEFT[self.encBufInd0[LEFT]:ENC_BUF_SIZE]
-            self.encBuf[LEFT][0:self.encBufInd1[LEFT]+1] = ENC_VAL_LEFT[0:self.encBufInd1[LEFT]+1]
-          
-        # RIGHT side fill buffer
-        self.encBufInd0[RIGHT] = self.encBufInd1[RIGHT]
-        self.encBufInd1[RIGHT] = ENC_IND_RIGHT
-        if self.encBufInd0[RIGHT] < self.encBufInd1[RIGHT]:
-            self.encBuf[RIGHT][self.encBufInd0[RIGHT]:self.encBufInd1[RIGHT]+1] = ENC_VAL_RIGHT[self.encBufInd0[RIGHT]:self.encBufInd1[RIGHT]+1]
-        else:
-            self.encBuf[RIGHT][self.encBufInd0[RIGHT]:ENC_BUF_SIZE] = ENC_VAL_RIGHT[self.encBufInd0[RIGHT]:ENC_BUF_SIZE]
-            self.encBuf[RIGHT][0:self.encBufInd1[RIGHT]+1] = ENC_VAL_RIGHT[0:self.encBufInd1[RIGHT]+1]
+        # Fill buffers
+        for side in range(0,2):
+            self.encBufInd0[side] = self.encBufInd1[side]
+            self.encBufInd1[side] = ENC_IND[side]
+            ind0 = self.encBufInd0[side]
+            ind1 = self.encBufInd1[side]
+            if ind0 < ind1:    
+                self.encTimeBuf[side][ind0:ind1] = ENC_TIME[side][ind0:ind1]
+                self.encValBuf[side][ind0:ind1] = ENC_VAL[side][ind0:ind1]
+                self.encPWMBuf[side][ind0:ind1] = [self.pwm[side]]*(ind1-ind0)
+                self.encNNewBuf[side][ind0:ind1] = [(ind1-ind0)]*(ind1-ind0)
+            elif ind0 > ind1:
+                self.encTimeBuf[side][ind0:ENC_BUF_SIZE] = ENC_TIME[side][ind0:ENC_BUF_SIZE]
+                self.encValBuf[side][ind0:ENC_BUF_SIZE] = ENC_VAL[side][ind0:ENC_BUF_SIZE]
+                self.encPWMBuf[side][ind0:ENC_BUF_SIZE] = [self.pwm[side]]*(ENC_BUF_SIZE-ind0)
+                self.encNNewBuf[side][ind0:ENC_BUF_SIZE] = [(ENC_BUF_SIZE-ind0+ind0)]*(ENC_BUF_SIZE-ind0)
+                if ind1 > 0:
+                    self.encTimeBuf[side][0:ind1] = ENC_VAL[side][0:ind1]
+                    self.encValBuf[side][0:ind1] = ENC_VAL[side][0:ind1]
+                    self.encPWMBuf[side][0:ind1] = [self.pwm[side]]*ind1
+                    self.encNNewBuf[side][0:ind1] = [(ENC_BUF_SIZE-ind0+ind1)]*ind1
             
-            
-        print "LEFT: " + str(self.encBufInd1[LEFT] - self.encBufInd0[LEFT]) + \
-            " RIGHT: " + str(self.encBufInd1[RIGHT] - self.encBufInd0[RIGHT])
+#         print "LEFT: " + str(self.encBufInd1[LEFT] - self.encBufInd0[LEFT]) + \
+#             " RIGHT: " + str(self.encBufInd1[RIGHT] - self.encBufInd0[RIGHT])
 #         self.encoderVal[LEFT] = ENC_VAL_LEFT[ENC_IND_LEFT]
 #         self.encoderVal[RIGHT] = ENC_VAL_RIGHT[ENC_IND_RIGHT]
         
 #         print "ENC_LEFT_VAL: " + str(self.encoderVal[LEFT]) + " ENC_RIGHT_VAL: " + str(self.encoderVal[RIGHT])
         
     def writeBufferToFile(self):
-        matrix = map(list, zip(*[ENC_TIME_LEFT, ENC_VAL_LEFT, 
-                                 ENC_TIME_RIGHT, ENC_VAL_RIGHT]))
+        matrix = map(list, zip(*[self.encTimeBuf[LEFT], self.encValBuf[LEFT], self.encPWMBuf[LEFT], self.encNNewBuf[LEFT], \
+                                 self.encTimeBuf[RIGHT], self.encValBuf[RIGHT], self.encPWMBuf[RIGHT], self.encNNewBuf[RIGHT]]))
         s = [[str(e) for e in row] for row in matrix]
         lens = [len(max(col, key=len)) for col in zip(*s)]
         fmt = '\t'.join('{{:{}}}'.format(x) for x in lens)
@@ -362,156 +350,16 @@ class encoderRead(threading.Thread):
         
         self.t0 = time.time()
         while RUN_FLAG:
-            global ENC_IND_LEFT
-            global ENC_TIME_LEFT
-            global ENC_VAL_LEFT
-    
-            global ENC_IND_RIGHT
-            global ENC_TIME_RIGHT
-            global ENC_VAL_RIGHT
+            global ENC_IND
+            global ENC_TIME
+            global ENC_VAL
             
-            ENC_TIME_LEFT[ENC_IND_LEFT] = time.time() - self.t0
-            ADC_LOCK.acquire()
-            ENC_VAL_LEFT[ENC_IND_LEFT] = ADC.read_raw(self.encPin[LEFT])
-            time.sleep(ADCTIME)
-            ADC_LOCK.release()
-            ENC_IND_LEFT = (ENC_IND_LEFT + 1) % ENC_BUF_SIZE
-            
-            ENC_TIME_RIGHT[ENC_IND_RIGHT] = time.time() - self.t0
-            ADC_LOCK.acquire()
-            ENC_VAL_RIGHT[ENC_IND_RIGHT] = ADC.read_raw(self.encPin[RIGHT])
-            time.sleep(ADCTIME)
-            ADC_LOCK.release()
-            ENC_IND_RIGHT = (ENC_IND_RIGHT + 1) % ENC_BUF_SIZE
+            for side in range(0,2):
+                ENC_TIME[side][ENC_IND[side]] = time.time() - self.t0
+                ADC_LOCK.acquire()
+                ENC_VAL[side][ENC_IND[side]] = ADC.read_raw(self.encPin[side])
+                time.sleep(ADCTIME)
+                ADC_LOCK.release()
+                ENC_IND[side] = (ENC_IND[side] + 1) % ENC_BUF_SIZE
 
-            
-class Encoders(threading.Thread):
-    """The Encoders Class"""
-    
-    # === Class Properties ===
-    # Parameters
-    writeFlag = False
-    sampleTime = 0.001
-    threshold = [1325, 1325]
-    tickPerRev = 16
-    
-    # State
-    t0 = -1
-    t = 0
-    tickTime = [-1, -1]
-    tickPrevTime = [-1, -1]
-    val = [-1, -1]
-    cog = [-1, -1]
-    pos = [0, 0]
-    vel = [0, 0]
-    
-    if writeFlag:
-        size = 1000
-          
-        timeLeftList = [0] * size
-        valLeftList = [0] * size
-        cogLeftList = [0] * size
-          
-        timeRightList = [0] * size
-        valRightList = [0] * size
-        cogRightList = [0] * size
-    
-    
-    # === Class Methods ===
-    # Constructor
-    def __init__(self,pin=('P9_39', 'P9_37')):
-        
-        # Initialize thread
-        threading.Thread.__init__(self)
-        
-        # Set properties
-        self.pin = pin
-
-    # Methods
-    def run(self):
-        global RUN_FLAG
-        global ENC_VAL
-        cnt = 0
-        self.t0 = time.time()
-        
-        while RUN_FLAG:
-            self.sample(LEFT)
-            
-            if self.writeFlag:
-                self.timeLeftList[cnt] = self.t
-                self.valLeftList[cnt] = self.val[LEFT]
-                self.cogLeftList[cnt] = self.cog[LEFT]
-            
-            time.sleep(self.sampleTime)
-            
-            self.sample(RIGHT)
-            
-            if self.writeFlag:
-                self.timeRightList[cnt] = self.t
-                self.valRightList[cnt] = self.val[RIGHT]
-                self.cogRightList[cnt] = self.cog[RIGHT]
-                
-            time.sleep(self.sampleTime)
-                
-            if self.writeFlag:
-                cnt = cnt + 1
-                if cnt == self.size:
-                    print 'Quitting b/c ' + str(self.size) + ' updates occured'
-                    RUN_FLAG_LOCK.acquire()
-                    RUN_FLAG = False
-                    RUN_FLAG_LOCK.release()
-            
-            
-            
-        if self.writeFlag:
-            self.writeToFile()
-        
-        return
-    
-    def sample(self,side):
-        self.t = time.time() - self.t0
-        self.val[side] = ADC.read_raw(self.pin[side])
-        
-#         readFlag =True
-#         while readFlag:
-#             try:
-#                 self.t = time.time() - self.t0
-#                 self.val[side] = ADC.read_raw(self.pin[side])
-#                 readFlag = False
-#             except:
-#                 continue
-        
-        cogPrev = self.cog[side]
-        if self.val[side] >= self.threshold[side]:
-            self.cog[side] = 1
-        else:
-            self.cog[side] = 0
-         
-        if cogPrev == 0 and self.cog[side] == 1:
-            # Tick
-            dir = ENC_DIR[side]
-            self.tickPrevTime[side] = self.tickTime[side]
-            self.tickTime[side] = self.t
-            self.pos[side] = self.pos[side] + dir
-            if self.tickPrevTime[side] != -1:
-                self.vel[side] = dir * (self.tickTime[side] - self.tickPrevTime[side])**(-1.0) / (self.tickPerRev)
-                
-            ENC_VAL_LOCK.acquire()
-            ENC_VAL[side] = self.pos[side]
-            ENC_VAL_LOCK.release()
-            ENC_VEL_LOCK.acquire()
-            ENC_VEL[side] = self.vel[side]
-            ENC_VEL_LOCK.release()
-            
-            
-    def writeToFile(self):
-        matrix = map(list, zip(*[self.timeLeftList, self.valLeftList, self.cogLeftList, 
-                                 self.timeRightList, self.valRightList, self.cogRightList]))
-        s = [[str(e) for e in row] for row in matrix]
-        lens = [len(max(col, key=len)) for col in zip(*s)]
-        fmt = '\t'.join('{{:{}}}'.format(x) for x in lens)
-        table = [fmt.format(*row) for row in s]
-        f = open('output.txt','w')
-        f.write('\n'.join(table))
-        f.close()
             
