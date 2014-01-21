@@ -12,6 +12,8 @@ import math
 import re
 import socket
 import threading
+import numpy as np
+
 
 import Adafruit_BBIO.GPIO as GPIO
 import Adafruit_BBIO.PWM as PWM
@@ -26,7 +28,8 @@ MAX = 1
 
 ADCTIME = 0.001
 
-ENC_BUF_SIZE = 2**13
+ENC_BUF_SIZE = 2**8
+# ENC_BUF_SIZE = 2**13
 
 ENC_IND = [0, 0]
 ENC_TIME = [[0]*ENC_BUF_SIZE, [0]*ENC_BUF_SIZE]
@@ -42,7 +45,7 @@ class QuickBot():
 
     # === Class Properties ===
     # Parameters
-    sampleTime = 25.0 / 1000.0
+    sampleTime = 20.0 / 1000.0
 
     # Pins
     ledPin = 'USR1'
@@ -55,21 +58,41 @@ class QuickBot():
     # ADC Pins
     irPin = ('P9_35', 'P9_33', 'P9_40', 'P9_36', 'P9_38')
     encoderPin = ('P9_39','P9_37')
+    
+    # Encoder count parameters
+    winSize = 2**5 # Should be power of 2
+    ticksPerTurn = 16 # Number of ticks on encoder disc
+    minTickVelThreshold = 0.54 # Threshold on the slowest tick velocity
+    minPWMThreshold = 45 # Threshold on the minimum magnitude of a PWM input value
+    vel95PrctRiseTime = 1.0 # Time it takes tick velocity to get to 95% of steady state value
 
     # State -- (LEFT, RIGHT)
     pwm = [0, 0]
     
-    irVal = [0, 0, 0, 0, 0]
+    irVal = [0.0, 0.0, 0.0, 0.0, 0.0]
     ithIR = 0
     
-    encoderVal = [0, 0]
-    encoderVel = [0.0, 0.0]
-    encTimeBuf = [[0]*ENC_BUF_SIZE, [0]*ENC_BUF_SIZE]
-    encValBuf = [[0]*ENC_BUF_SIZE, [0]*ENC_BUF_SIZE]
-    encPWMBuf = [[0]*ENC_BUF_SIZE, [0]*ENC_BUF_SIZE]
-    encNNewBuf = [[0]*ENC_BUF_SIZE, [0]*ENC_BUF_SIZE]
+    encTime = [0.0, 0.0]
+    encVal = [0.0, 0.0] 
+    encVel = [0.0, 0.0]
+    encVelVar = [0.1, 0.1]
+    
+    encSumN = [0, 0]
     encBufInd0 = [0, 0]
     encBufInd1 = [0, 0]
+    encTimeWin = np.zeros((2,winSize))
+    encValWin = np.zeros((2,winSize))
+    encPWMWin = np.zeros((2,winSize))
+    encTau = [0.0, 0.0]
+    encCnt = 0;
+    
+    if 0: 
+        encTimeBuf = [[0]*ENC_BUF_SIZE, [0]*ENC_BUF_SIZE]
+        encValBuf = [[0]*ENC_BUF_SIZE, [0]*ENC_BUF_SIZE]
+        encPWMBuf = [[0]*ENC_BUF_SIZE, [0]*ENC_BUF_SIZE]
+        encNNewBuf = [[0]*ENC_BUF_SIZE, [0]*ENC_BUF_SIZE]
+        encBufInd0 = [0, 0]
+        encBufInd1 = [0, 0]
 
     # Constraints
     pwmLimits = [-100, 100] # [min, max]
@@ -182,7 +205,7 @@ class QuickBot():
         self.robotSocket.close()
         GPIO.cleanup()
         PWM.cleanup()
-        self.writeBufferToFile()
+        # self.writeBufferToFile()
 
     def update(self):
         self.readIRValues()
@@ -237,13 +260,13 @@ class QuickBot():
 
             elif msgResult.group('CMD') == 'ENVAL':
                 if msgResult.group('QUERY'):
-                    reply = '[' + ', '.join(map(str, self.encoderVal)) + ']'
+                    reply = '[' + ', '.join(map(str, self.encVal)) + ']'
                     print 'Sending: ' + reply
                     self.robotSocket.sendto(reply + '\n', (self.baseIP, self.port))
 
             elif msgResult.group('CMD') == 'ENVEL':
                 if msgResult.group('QUERY'):
-                    reply = '[' + ', '.join(map(str, self.encoderVel)) + ']'
+                    reply = '[' + ', '.join(map(str, self.encVel)) + ']'
                     print 'Sending: ' + reply
                     self.robotSocket.sendto(reply + '\n', (self.baseIP, self.port))
 
@@ -258,8 +281,8 @@ class QuickBot():
                         int(pwmRegex.match(args).group('RIGHT'))]
                         self.setPWM(pwm)
 
-                    reply = '[' + ', '.join(map(str, self.encoderVal)) + ', ' \
-                      + ', '.join(map(str, self.encoderVel)) + ']'
+                    reply = '[' + ', '.join(map(str, self.encVal)) + ', ' \
+                      + ', '.join(map(str, self.encVel)) + ']'
                     print 'Sending: ' + reply
                     self.robotSocket.sendto(reply + '\n', (self.baseIP, self.port))
 
@@ -286,35 +309,142 @@ class QuickBot():
         
             
     def readEncoderValues(self):
-        # Fill buffers
+        self.encCnt = self.encCnt + 1;
+        # Fill window
         for side in range(0,2):
+            self.encTime[side] = self.encTimeWin[side][-1]
+            
             self.encBufInd0[side] = self.encBufInd1[side]
             self.encBufInd1[side] = ENC_IND[side]
-            ind0 = self.encBufInd0[side]
-            ind1 = self.encBufInd1[side]
-            if ind0 < ind1:    
-                self.encTimeBuf[side][ind0:ind1] = ENC_TIME[side][ind0:ind1]
-                self.encValBuf[side][ind0:ind1] = ENC_VAL[side][ind0:ind1]
-                self.encPWMBuf[side][ind0:ind1] = [self.pwm[side]]*(ind1-ind0)
-                self.encNNewBuf[side][ind0:ind1] = [(ind1-ind0)]*(ind1-ind0)
+            ind0 = self.encBufInd0[side] # starting index
+            ind1 = self.encBufInd1[side] # ending index (this element is not included until the next update)
+            
+            if ind0 < ind1:
+                N = ind1 - ind0 # number of elements
+                self.encSumN[side] = self.encSumN[side] + N
+                self.encTimeWin[side] = np.roll(self.encTimeWin[side], -N)
+                self.encTimeWin[side, -N:] = ENC_TIME[side][ind0:ind1]
+                self.encValWin[side] = np.roll(self.encValWin[side], -N)
+                self.encValWin[side, -N:] = ENC_VAL[side][ind0:ind1]
+                self.encPWMWin[side] = np.roll(self.encPWMWin[side], -N)
+                self.encPWMWin[side, -N:] = [self.pwm[side]]*N
+                
             elif ind0 > ind1:
-                self.encTimeBuf[side][ind0:ENC_BUF_SIZE] = ENC_TIME[side][ind0:ENC_BUF_SIZE]
-                self.encValBuf[side][ind0:ENC_BUF_SIZE] = ENC_VAL[side][ind0:ENC_BUF_SIZE]
-                self.encPWMBuf[side][ind0:ENC_BUF_SIZE] = [self.pwm[side]]*(ENC_BUF_SIZE-ind0)
-                self.encNNewBuf[side][ind0:ENC_BUF_SIZE] = [(ENC_BUF_SIZE-ind0+ind0)]*(ENC_BUF_SIZE-ind0)
-                if ind1 > 0:
-                    self.encTimeBuf[side][0:ind1] = ENC_VAL[side][0:ind1]
-                    self.encValBuf[side][0:ind1] = ENC_VAL[side][0:ind1]
-                    self.encPWMBuf[side][0:ind1] = [self.pwm[side]]*ind1
-                    self.encNNewBuf[side][0:ind1] = [(ENC_BUF_SIZE-ind0+ind1)]*ind1
+                N = ENC_BUF_SIZE - ind0 + ind1 # number of elements
+                self.encSumN[side] = self.encSumN[side] + N
+                self.encTimeWin[side] = np.roll(self.encTimeWin[side], -N)
+                self.encValWin[side] = np.roll(self.encValWin[side], -N)
+                self.encPWMWin[side] = np.roll(self.encPWMWin[side], -N)
+                self.encPWMWin[side, -N:] = [self.pwm[side]]*N
+                if ind1 == 0:
+                    self.encTimeWin[side, -N:] = ENC_TIME[side][ind0:]
+                    self.encValWin[side, -N:] = ENC_VAL[side][ind0:]
+                else:
+                    self.encTimeWin[side, -N:-ind1] = ENC_TIME[side][ind0:]
+                    self.encValWin[side, -N:-ind1] = ENC_VAL[side][ind0:]
+                    self.encTimeWin[side, -ind1:] = ENC_TIME[side][0:ind1]
+                    self.encValWin[side, -ind1:] = ENC_VAL[side][0:ind1]
+                
+            if ind0 != ind1:
+                tauNew = self.encTimeWin[side,-1] - self.encTimeWin[side,-N]
+                self.encTau[side] = tauNew / self.encCnt + self.encTau[side] * (self.encCnt-1)/self.encCnt # Running average
+                if self.encSumN[side] > self.winSize:
+                    self.countEncoderTicks(side)
+        
+        # Fill buffers
+        if 0:
+            for side in range(0,2):
+                self.encBufInd0[side] = self.encBufInd1[side]
+                self.encBufInd1[side] = ENC_IND[side]
+                ind0 = self.encBufInd0[side]
+                ind1 = self.encBufInd1[side]
+                if ind0 < ind1:    
+                    self.encTimeBuf[side][ind0:ind1] = ENC_TIME[side][ind0:ind1]
+                    self.encValBuf[side][ind0:ind1] = ENC_VAL[side][ind0:ind1]
+                    self.encPWMBuf[side][ind0:ind1] = [self.pwm[side]]*(ind1-ind0)
+                    self.encNNewBuf[side][ind0:ind1] = [(ind1-ind0)]*(ind1-ind0)
+                elif ind0 > ind1:
+                    self.encTimeBuf[side][ind0:ENC_BUF_SIZE] = ENC_TIME[side][ind0:ENC_BUF_SIZE]
+                    self.encValBuf[side][ind0:ENC_BUF_SIZE] = ENC_VAL[side][ind0:ENC_BUF_SIZE]
+                    self.encPWMBuf[side][ind0:ENC_BUF_SIZE] = [self.pwm[side]]*(ENC_BUF_SIZE-ind0)
+                    self.encNNewBuf[side][ind0:ENC_BUF_SIZE] = [(ENC_BUF_SIZE-ind0+ind0)]*(ENC_BUF_SIZE-ind0)
+                    if ind1 > 0:
+                        self.encTimeBuf[side][0:ind1] = ENC_VAL[side][0:ind1]
+                        self.encValBuf[side][0:ind1] = ENC_VAL[side][0:ind1]
+                        self.encPWMBuf[side][0:ind1] = [self.pwm[side]]*ind1
+                        self.encNNewBuf[side][0:ind1] = [(ENC_BUF_SIZE-ind0+ind1)]*ind1
             
 #         print "LEFT: " + str(self.encBufInd1[LEFT] - self.encBufInd0[LEFT]) + \
 #             " RIGHT: " + str(self.encBufInd1[RIGHT] - self.encBufInd0[RIGHT])
-#         self.encoderVal[LEFT] = ENC_VAL_LEFT[ENC_IND_LEFT]
-#         self.encoderVal[RIGHT] = ENC_VAL_RIGHT[ENC_IND_RIGHT]
+#         self.encVal[LEFT] = ENC_VAL_LEFT[ENC_IND_LEFT]
+#         self.encVal[RIGHT] = ENC_VAL_RIGHT[ENC_IND_RIGHT]
         
-#         print "ENC_LEFT_VAL: " + str(self.encoderVal[LEFT]) + " ENC_RIGHT_VAL: " + str(self.encoderVal[RIGHT])
+#         print "ENC_LEFT_VAL: " + str(self.encVal[LEFT]) + " ENC_RIGHT_VAL: " + str(self.encVal[RIGHT])
+    
+    def countEncoderTicks(self,side):
+        # Set variables
+        t = self.encTimeWin[side] # Time vector of data (not consistent sampling time)
+        N = self.winSize # Number of samples
+        Ts = np.mean(np.diff(t)) # Sampling time
+        T = np.arange(0,N,Ts) + t[0] # Time vector of new resampled data (consistent sampling time)
         
+        # Resample encoder values
+        y = np.interp(T,t,self.encValWin[side]) # Encoder resampled data
+        yBar = np.mean(y) # Average encoder values
+        
+        # FFT
+        Fs = 1/Ts # Frequency sampling spacing
+        Y = np.fft.fft(y-yBar) / N # Frequency spectrum of y
+        f = Fs/2 * np.linspace(0,1,N/2+1) # Frequency vector
+        
+        YMag = 2*np.abs(Y[0:N/2+1]) # Single sided amplitude spectrum
+        
+        # Extract highest magnitude frequency component
+        ind = np.argmax(YMag)
+        mag = YMag[ind]
+        freq = f[ind]
+        
+        freqRatio = mag / np.sum(YMag)  # Ratio of best frequency component energy to total energy in signal - Higher is better
+        
+        # Estimate tick velocity
+        uStar = np.mean(self.encPWMWin[side]) # Input operating point
+        
+        # omega - Measured tick velocity
+        if self.encVel[side] != 0:
+            omega = freq / self.ticksPerTurn * np.sign(self.encVel[side])
+        else:
+            omega = freq / self.ticksPerTurn * np.sign(uStar)
+            
+        omegaStar = operatingPoint(uStar, self.minPWMThreshold) # Steady state tick velocity given current input                
+        z = omega - omegaStar # Measurement tick velocity error from steady state value
+        x = self.encVel[side] - omegaStar # Previous state value (state = error from steady state value)
+        P = self.encVelVar[side] # Previous state variance
+        A = -3 * 1 / self.vel95PrctRiseTime  # Continuous time state model matrix (xDot = A*x + B*u + w) (95% rise time)
+        Phi = np.exp(A * self.encTau[side])
+        H = 1; # Observation model matrix (z = H*x + v)
+        W = 0.15 # Process noise covariance
+        
+        # Input is 0 and velocity is small set measurement to 0 with no noise
+        # V - Measurement noise covariance
+        if np.abs(uStar) < self.minPWMThreshold and np.abs(x) < self.minTickVelThreshold:
+            z = 0
+            V = 0
+        else:
+            # Measurement noise is bigger when spike in frequency spectrum is less pronounced
+            V = max(0.1 - (freqRatio-.25)/8, 0.01);
+            
+        # Kalman filter
+        (xPlus, PPlus) = kalman(x,P,Phi,H,W,V,z)
+        
+        # Estimate tick velocity
+        self.encVel[side] = xPlus + omegaStar
+        self.encVelVar[side] = PPlus
+        
+        # Count ticks        
+        ticksNew = self.encVel[side] * self.ticksPerTurn * (t[-1] - self.encTime[side])
+        self.encVal[side] = ticksNew + self.encVal[side]
+        
+    
     def writeBufferToFile(self):
         matrix = map(list, zip(*[self.encTimeBuf[LEFT], self.encValBuf[LEFT], self.encPWMBuf[LEFT], self.encNNewBuf[LEFT], \
                                  self.encTimeBuf[RIGHT], self.encValBuf[RIGHT], self.encPWMBuf[RIGHT], self.encNNewBuf[RIGHT]]))
@@ -361,5 +491,64 @@ class encoderRead(threading.Thread):
                 time.sleep(ADCTIME)
                 ADC_LOCK.release()
                 ENC_IND[side] = (ENC_IND[side] + 1) % ENC_BUF_SIZE
+                
+
+def operatingPoint(uStar, uStarThreshold):
+    """ This function returns the steady state tick velocity given some PWM input.
+    
+    uStar: PWM input.
+    uStarThreshold: Threshold on the minimum magnitude of a PWM input value
+    
+    returns: omegaStar - steady state tick velocity
+    """
+    # Matlab code to find beta values
+    # X = [40; 80; 100];
+    # Y = [0.85; 2.144; 3.5];
+    # H = [X ones(size(X))];
+    # beta = H \ Y
+    beta = [0.0425, -0.9504]
+    
+    if np.abs(uStar) <= uStarThreshold:
+        omegaStar = 0.0
+    elif uStar > 0:
+        omegaStar = beta[0]*uStar + beta[1]
+    else:
+        omegaStar = -1.0*(beta[0]*np.abs(uStar) + beta[1])
+        
+    return omegaStar
+    
+
+def kalman(x, P, Phi, H, W, V, z):
+    """This function returns an optimal expected value of the state and covariance 
+    error matrix given an update and system parameters.
+    
+    x:   Estimate of staet at time t-1.
+    P:   Estimate of error covariance matrix at time t-1.
+    Phi: Discrete time state tranistion matrix at time t-1.
+    H:   Observation model matrix at time t.
+    W:   Process noise covariance at time t-1.
+    V:   Measurement noise covariance at time t.
+    z:   Measurement at time t.
+    
+    returns: (x,P) tuple
+    x: Updated estimate of state at time t.
+    P: Updated estimate of error covariance matrix at time t. 
+       
+    """
+    x_p = Phi*x # Prediction of setimated state vector    
+    P_p = Phi*P*Phi + W # Prediction of error covariance matrix
+    S = H*P_p*H + V # Sum of error variances
+    S_inv = 1/S # Inverse of sum of error variances
+    K = P_p*H*S_inv # Kalman gain
+    r = z - H*x_p # Prediction residual
+    w = -K*r # Process error
+    x = x_p - w # Update estimated state vector
+    v = z - H*x # Measurement error
+    if np.isnan(K*V):
+        P = P_p
+    else:
+        P = (1 - K*H)*P_p*(1 - K*H) + K*V*K # Updated error covariance matrix
+
+    return (x, P)
 
             
