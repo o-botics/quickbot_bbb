@@ -19,6 +19,12 @@ import Adafruit_BBIO.GPIO as GPIO
 import Adafruit_BBIO.PWM as PWM
 import Adafruit_BBIO.ADC as ADC
 
+# Tic Toc Variables
+TICTOC_START = 0
+TICTOC_COUNT = 0
+TICTOC_MEAN = 0
+TICTOC_MAX = -float('inf')
+TICTOC_MIN = float('inf')
 
 # Constants
 LEFT = 0
@@ -85,14 +91,6 @@ class QuickBot():
     encPWMWin = np.zeros((2,winSize))
     encTau = [0.0, 0.0]
     encCnt = 0;
-    
-    if 0: 
-        encTimeBuf = [[0]*ENC_BUF_SIZE, [0]*ENC_BUF_SIZE]
-        encValBuf = [[0]*ENC_BUF_SIZE, [0]*ENC_BUF_SIZE]
-        encPWMBuf = [[0]*ENC_BUF_SIZE, [0]*ENC_BUF_SIZE]
-        encNNewBuf = [[0]*ENC_BUF_SIZE, [0]*ENC_BUF_SIZE]
-        encBufInd0 = [0, 0]
-        encBufInd1 = [0, 0]
 
     # Constraints
     pwmLimits = [-100, 100] # [min, max]
@@ -139,7 +137,6 @@ class QuickBot():
 
     # Getters and Setters
     def setPWM(self, pwm):
-        global ENC_DIR
         # [leftSpeed, rightSpeed]: 0 is off, caps at min and max values
 
         self.pwm[LEFT] = min(max(pwm[LEFT], self.pwmLimits[MIN]), self.pwmLimits[MAX])
@@ -180,8 +177,7 @@ class QuickBot():
         self.encoderRead.start()
         
         while RUN_FLAG == True:
-            tStart = time.time()
-
+#             tic()
             self.update()
              
             # Flash BBB LED
@@ -192,9 +188,7 @@ class QuickBot():
                 self.ledFlag = True
                 GPIO.output(self.ledPin, GPIO.LOW)
             time.sleep(self.sampleTime)
-            
-            tEnd = time.time()            
-#             print("Time: ") + str(tEnd - tStart)         
+#             toc("Run loop")
             
         self.cleanup()        
         return
@@ -205,19 +199,20 @@ class QuickBot():
         self.robotSocket.close()
         GPIO.cleanup()
         PWM.cleanup()
+#         tictocPrint()     
         # self.writeBufferToFile()
 
-    def update(self):
-        self.readIRValues()
-        self.readEncoderValues()
+    def update(self):        
+        self.readIRValues()        
+        self.readEncoderValues()        
         self.parseCmdBuffer()
+
 
     def parseCmdBuffer(self):
         global RUN_FLAG
         try:
             line = self.robotSocket.recv(1024)
         except socket.error as msg:
-            #print msg
             return
         
         self.cmdBuffer += line
@@ -269,6 +264,11 @@ class QuickBot():
                     reply = '[' + ', '.join(map(str, self.encVel)) + ']'
                     print 'Sending: ' + reply
                     self.robotSocket.sendto(reply + '\n', (self.baseIP, self.port))
+                    
+            elif msgResult.group('CMD') == 'RESET':
+                self.encVal[LEFT] = 0.0
+                self.encVal[RIGHT] = 0.0
+                print 'Encoder values reset to [' + ', '.join(map(str, self.encVel)) + ']'
 
             elif msgResult.group('CMD') == 'UPDATE':
                 if msgResult.group('SET') and msgResult.group('ARGS'):
@@ -299,11 +299,8 @@ class QuickBot():
         time.sleep(ADCTIME)
         ADC_LOCK.release()
         
-        if self.irVal[self.ithIR] >= 1000:
+        if self.irVal[self.ithIR] >= 1100:
                 self.irVal[self.ithIR] = prevVal
-        
-#         if self.ithIR == 4:
-#             print "IR " + str(self.ithIR) + ": " + str(self.irVal[self.ithIR])
         
         self.ithIR = ((self.ithIR+1) % 5)
         
@@ -345,48 +342,18 @@ class QuickBot():
                     self.encTimeWin[side, -ind1:] = ENC_TIME[side][0:ind1]
                     self.encValWin[side, -ind1:] = ENC_VAL[side][0:ind1]
                 
-            if ind0 != ind1:
+            if ind0 != ind1:                
                 tauNew = self.encTimeWin[side,-1] - self.encTimeWin[side,-N]
                 self.encTau[side] = tauNew / self.encCnt + self.encTau[side] * (self.encCnt-1)/self.encCnt # Running average
                 if self.encSumN[side] > self.winSize:
                     self.countEncoderTicks(side)
-        
-        # Fill buffers
-        if 0:
-            for side in range(0,2):
-                self.encBufInd0[side] = self.encBufInd1[side]
-                self.encBufInd1[side] = ENC_IND[side]
-                ind0 = self.encBufInd0[side]
-                ind1 = self.encBufInd1[side]
-                if ind0 < ind1:    
-                    self.encTimeBuf[side][ind0:ind1] = ENC_TIME[side][ind0:ind1]
-                    self.encValBuf[side][ind0:ind1] = ENC_VAL[side][ind0:ind1]
-                    self.encPWMBuf[side][ind0:ind1] = [self.pwm[side]]*(ind1-ind0)
-                    self.encNNewBuf[side][ind0:ind1] = [(ind1-ind0)]*(ind1-ind0)
-                elif ind0 > ind1:
-                    self.encTimeBuf[side][ind0:ENC_BUF_SIZE] = ENC_TIME[side][ind0:ENC_BUF_SIZE]
-                    self.encValBuf[side][ind0:ENC_BUF_SIZE] = ENC_VAL[side][ind0:ENC_BUF_SIZE]
-                    self.encPWMBuf[side][ind0:ENC_BUF_SIZE] = [self.pwm[side]]*(ENC_BUF_SIZE-ind0)
-                    self.encNNewBuf[side][ind0:ENC_BUF_SIZE] = [(ENC_BUF_SIZE-ind0+ind0)]*(ENC_BUF_SIZE-ind0)
-                    if ind1 > 0:
-                        self.encTimeBuf[side][0:ind1] = ENC_VAL[side][0:ind1]
-                        self.encValBuf[side][0:ind1] = ENC_VAL[side][0:ind1]
-                        self.encPWMBuf[side][0:ind1] = [self.pwm[side]]*ind1
-                        self.encNNewBuf[side][0:ind1] = [(ENC_BUF_SIZE-ind0+ind1)]*ind1
-            
-#         print "LEFT: " + str(self.encBufInd1[LEFT] - self.encBufInd0[LEFT]) + \
-#             " RIGHT: " + str(self.encBufInd1[RIGHT] - self.encBufInd0[RIGHT])
-#         self.encVal[LEFT] = ENC_VAL_LEFT[ENC_IND_LEFT]
-#         self.encVal[RIGHT] = ENC_VAL_RIGHT[ENC_IND_RIGHT]
-        
-#         print "ENC_LEFT_VAL: " + str(self.encVal[LEFT]) + " ENC_RIGHT_VAL: " + str(self.encVal[RIGHT])
-    
+             
     def countEncoderTicks(self,side):
         # Set variables
         t = self.encTimeWin[side] # Time vector of data (not consistent sampling time)
         N = self.winSize # Number of samples
-        Ts = np.mean(np.diff(t)) # Sampling time
-        T = np.arange(0,N,Ts) + t[0] # Time vector of new resampled data (consistent sampling time)
+        T = np.linspace(t[0],t[-1],N)  # Time vector of new resampled data (consistent sampling time)
+        Ts = np.mean(np.diff(T)) # Sampling time
         
         # Resample encoder values
         y = np.interp(T,t,self.encValWin[side]) # Encoder resampled data
@@ -394,7 +361,7 @@ class QuickBot():
         
         # FFT
         Fs = 1/Ts # Frequency sampling spacing
-        Y = np.fft.fft(y-yBar) / N # Frequency spectrum of y
+        Y = np.fft.fft(y-yBar,self.winSize) / N # Frequency spectrum of y
         f = Fs/2 * np.linspace(0,1,N/2+1) # Frequency vector
         
         YMag = 2*np.abs(Y[0:N/2+1]) # Single sided amplitude spectrum
@@ -442,7 +409,7 @@ class QuickBot():
         
         # Count ticks        
         ticksNew = self.encVel[side] * self.ticksPerTurn * (t[-1] - self.encTime[side])
-        self.encVal[side] = ticksNew + self.encVal[side]
+        self.encVal[side] = ticksNew + self.encVal[side]        
         
     
     def writeBufferToFile(self):
@@ -550,5 +517,37 @@ def kalman(x, P, Phi, H, W, V, z):
         P = (1 - K*H)*P_p*(1 - K*H) + K*V*K # Updated error covariance matrix
 
     return (x, P)
+
+def tic():
+    global TICTOC_START
+    TICTOC_START = time.time()
+    
+def toc(tictocName='toc', printFlag=True):
+    global TICTOC_START
+    global TICTOC_COUNT
+    global TICTOC_MEAN
+    global TICTOC_MAX
+    global TICTOC_MIN
+       
+    tictocTime = time.time() - TICTOC_START
+    TICTOC_COUNT = TICTOC_COUNT + 1
+    TICTOC_MEAN = tictocTime / TICTOC_COUNT + TICTOC_MEAN * (TICTOC_COUNT-1) / TICTOC_COUNT
+    TICTOC_MAX = max(TICTOC_MAX,tictocTime)
+    TICTOC_MIN = min(TICTOC_MIN,tictocTime)
+    
+    if printFlag:
+        print tictocName + " time: " + str(tictocTime)
+        
+def tictocPrint():
+    global TICTOC_COUNT
+    global TICTOC_MEAN
+    global TICTOC_MAX
+    global TICTOC_MIN
+    
+    print "Tic Toc Stats:"
+    print "Count = " + str(TICTOC_COUNT)
+    print "Mean = " + str(TICTOC_MEAN)
+    print "Max = " + str(TICTOC_MAX)
+    print "Min = " + str(TICTOC_MIN)
 
             
