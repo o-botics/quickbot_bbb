@@ -62,7 +62,7 @@ class QuickBot():
     pwmPin = ('P9_14', 'P9_16')
 
     # ADC Pins
-    irPin = ('P9_35', 'P9_33', 'P9_40', 'P9_36', 'P9_38')
+    irPin = ('P9_38', 'P9_40', 'P9_36', 'P9_35', 'P9_33')
     encoderPin = ('P9_39','P9_37')
     
     # Encoder count parameters
