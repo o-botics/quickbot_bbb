@@ -469,11 +469,18 @@ def operatingPoint(uStar, uStarThreshold):
     returns: omegaStar - steady state tick velocity
     """
     # Matlab code to find beta values
-    # X = [40; 80; 100];
+    # X = [40; 80; 100]; % Air Test
     # Y = [0.85; 2.144; 3.5];
+    # 
+    # r = 0.0325; % Wheel radius
+    # c = 2*pi*r; 
+    # X = [  70;   70;   70;   75;   75;   75;   80;   80;   80; 85;     85;   85;   90;   90;   90]; % Ground Test
+    # Z = [4.25; 3.95; 4.23; 3.67; 3.53; 3.48; 3.19; 3.08; 2.93; 2.52; 2.59; 2.56; 1.99; 2.02; 2.04];
+    # Y = 1./(Z*c);
     # H = [X ones(size(X))];
     # beta = H \ Y
-    beta = [0.0425, -0.9504]
+    # beta = [0.0425, -0.9504] # Air Test Results
+    beta = [0.0606, -3.1475] # Ground Test Results
     
     if np.abs(uStar) <= uStarThreshold:
         omegaStar = 0.0
