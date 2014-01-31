@@ -185,19 +185,22 @@ class QuickBot():
         global RUN_FLAG
         self.encoderRead.start()
         
-        while RUN_FLAG == True:
-#             tic()
-            self.update()
-             
-            # Flash BBB LED
-            if self.ledFlag == True:
-                self.ledFlag = False
-                GPIO.output(self.ledPin, GPIO.HIGH)
-            else:
-                self.ledFlag = True
-                GPIO.output(self.ledPin, GPIO.LOW)
-            time.sleep(self.sampleTime)
-#             toc("Run loop")
+        try:
+            while RUN_FLAG == True:
+    #             tic()
+                self.update()
+                 
+                # Flash BBB LED
+                if self.ledFlag == True:
+                    self.ledFlag = False
+                    GPIO.output(self.ledPin, GPIO.HIGH)
+                else:
+                    self.ledFlag = True
+                    GPIO.output(self.ledPin, GPIO.LOW)
+                time.sleep(self.sampleTime)
+    #             toc("Run loop")
+        except:
+            RUN_FLAG = False
             
         self.cleanup()        
         return
