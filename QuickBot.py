@@ -34,8 +34,7 @@ MAX = 1
 
 ADCTIME = 0.001
 
-ENC_BUF_SIZE = 2**8
-# ENC_BUF_SIZE = 2**13
+ENC_BUF_SIZE = 2**9
 
 ENC_IND = [0, 0]
 ENC_TIME = [[0]*ENC_BUF_SIZE, [0]*ENC_BUF_SIZE]
@@ -91,6 +90,16 @@ class QuickBot():
     encPWMWin = np.zeros((2,winSize))
     encTau = [0.0, 0.0]
     encCnt = 0;
+    
+    # Record variables
+    encRecSize = 2**13
+    encRecInd = [0, 0]
+    encTimeRec = np.zeros((2,encRecSize))
+    encValRec = np.zeros((2,encRecSize))
+    encPWMRec = np.zeros((2,encRecSize))
+    encNNewRec = np.zeros((2,encRecSize))
+    encCntRec = np.zeros((2,encRecSize))
+    encVelRec = np.zeros((2,encRecSize))
 
     # Constraints
     pwmLimits = [-100, 100] # [min, max]
@@ -200,7 +209,7 @@ class QuickBot():
         GPIO.cleanup()
         PWM.cleanup()
 #         tictocPrint()     
-        # self.writeBufferToFile()
+        self.writeBufferToFile()
 
     def update(self):        
         self.readIRValues()        
@@ -347,6 +356,17 @@ class QuickBot():
                 self.encTau[side] = tauNew / self.encCnt + self.encTau[side] * (self.encCnt-1)/self.encCnt # Running average
                 if self.encSumN[side] > self.winSize:
                     self.countEncoderTicks(side)
+                    
+                # Fill records
+                ind = self.encRecInd[side]
+                if ind+N < self.encRecSize:
+                    self.encTimeRec[side, ind:ind+N] = self.encTimeWin[side, -N:]
+                    self.encValRec[side, ind:ind+N] = self.encValWin[side, -N:]
+                    self.encPWMRec[side, ind:ind+N] = self.encPWMWin[side, -N:]
+                    self.encNNewRec[side, ind:ind+N] = [N]*N
+                    self.encCntRec[side, ind:ind+N] = [self.encVal[side]]*N
+                    self.encVelRec[side, ind:ind+N] = [self.encVel[side]]*N
+                self.encRecInd[side] = ind+N
              
     def countEncoderTicks(self,side):
         # Set variables
@@ -413,8 +433,8 @@ class QuickBot():
         
     
     def writeBufferToFile(self):
-        matrix = map(list, zip(*[self.encTimeBuf[LEFT], self.encValBuf[LEFT], self.encPWMBuf[LEFT], self.encNNewBuf[LEFT], \
-                                 self.encTimeBuf[RIGHT], self.encValBuf[RIGHT], self.encPWMBuf[RIGHT], self.encNNewBuf[RIGHT]]))
+        matrix = map(list, zip(*[self.encTimeRec[LEFT], self.encValRec[LEFT], self.encPWMRec[LEFT], self.encNNewRec[LEFT], \
+                                 self.encTimeRec[RIGHT], self.encValRec[RIGHT], self.encPWMRec[RIGHT], self.encNNewRec[RIGHT]]))
         s = [[str(e) for e in row] for row in matrix]
         lens = [len(max(col, key=len)) for col in zip(*s)]
         fmt = '\t'.join('{{:{}}}'.format(x) for x in lens)
