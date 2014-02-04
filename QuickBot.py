@@ -407,7 +407,7 @@ class QuickBot():
             
         omegaStar = operatingPoint(uStar, self.minPWMThreshold) # Steady state tick velocity given current input                
         z = omega - omegaStar # Measurement tick velocity error from steady state value
-        x = (self.encVel[side] / (2*self.ticksPerTurn)) - omegaStar # Previous state value (state = error from steady state value)
+        x = (self.encVel[side] / (self.ticksPerTurn)) - omegaStar # Previous state value (state = error from steady state value)
         P = self.encVelVar[side] / (self.ticksPerTurn**2) # Previous state variance
         A = -3 * 1 / self.vel95PrctRiseTime  # Continuous time state model matrix (xDot = A*x + B*u + w) (95% rise time)
         Phi = np.exp(A * self.encTau[side])
@@ -427,7 +427,7 @@ class QuickBot():
         (xPlus, PPlus) = kalman(x,P,Phi,H,W,V,z)
         
         # Estimate tick velocity
-        self.encVel[side] = 2*(xPlus + omegaStar) * self.ticksPerTurn
+        self.encVel[side] = (xPlus + omegaStar) * self.ticksPerTurn
         self.encVelVar[side] = PPlus * (self.ticksPerTurn**2)
         
         # Count ticks        
