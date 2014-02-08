@@ -2,8 +2,10 @@
 """
 @brief Run QuickBot class for Beaglebone Black
 
-@author Rowland O'Flaherty 
-@date 08/27/2013
+@author Rowland O'Flaherty (rowlandoflaherty.com)
+@date 02/07/2014
+@version: 1.0
+@license: The MIT License (MIT) (see LINENSE file)
 """
 
 import sys
@@ -34,6 +36,4 @@ print '    Base IP: ', baseIP
 print '    Robot IP: ', robotIP
 
 QB = QuickBot(baseIP, robotIP)
-# QB.setPWM([70,70])
 QB.run()
-#QB.start()
