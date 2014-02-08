@@ -2,7 +2,7 @@
 """
 @brief QuickBot class for Beaglebone Black
 
-@author Rowland O'Flaherty 
+@author Rowland O'Flaherty
 @date 08/27/2013
 """
 import os
@@ -45,6 +45,8 @@ ADC_LOCK = threading.Lock()
 RUN_FLAG = True
 RUN_FLAG_LOCK = threading.Lock()
 
+DEBUG = True
+
 class QuickBot():
     """The QuickBot Class"""
 
@@ -63,25 +65,29 @@ class QuickBot():
     # ADC Pins
     irPin = ('P9_38', 'P9_40', 'P9_36', 'P9_35', 'P9_33')
     encoderPin = ('P9_39','P9_37')
-    
-    # Encoder count parameters
+
+    # Encoder counting parameter and variables
     winSize = 2**5 # Should be power of 2
     ticksPerTurn = 16 # Number of ticks on encoder disc
-    minTickVelThreshold = 0.54 # Threshold on the slowest tick velocity
-    minPWMThreshold = 45 # Threshold on the minimum magnitude of a PWM input value
-    vel95PrctRiseTime = 1.0 # Time it takes tick velocity to get to 95% of steady state value
+#     minTickVelThreshold = 0.54 # Threshold on the slowest tick velocity
+    minPWMThreshold = [45, 45] # Threshold on the minimum magnitude of a PWM input value
+#     vel95PrctRiseTime = 1.0 # Time it takes tick velocity to get to 95% of steady state value
+    encTPrev = [0.0, 0.0]
+    encThreshold = [1200.0, 1200.0]
+    encTickState = [0, 0]
+    encTickStateVec = np.zeros((2,winSize))
 
     # State -- (LEFT, RIGHT)
     pwm = [0, 0]
-    
+
     irVal = [0.0, 0.0, 0.0, 0.0, 0.0]
     ithIR = 0
-    
+
     encTime = [0.0, 0.0]
-    encVal = [0.0, 0.0] 
+    encPos = [0.0, 0.0]
     encVel = [0.0, 0.0]
     encVelVar = [0.1, 0.1]
-    
+
     encSumN = [0, 0]
     encBufInd0 = [0, 0]
     encBufInd1 = [0, 0]
@@ -90,7 +96,7 @@ class QuickBot():
     encPWMWin = np.zeros((2,winSize))
     encTau = [0.0, 0.0]
     encCnt = 0;
-    
+
     # Record variables
     encRecSize = 2**13
     encRecInd = [0, 0]
@@ -98,7 +104,7 @@ class QuickBot():
     encValRec = np.zeros((2,encRecSize))
     encPWMRec = np.zeros((2,encRecSize))
     encNNewRec = np.zeros((2,encRecSize))
-    encCntRec = np.zeros((2,encRecSize))
+    encPosRec = np.zeros((2,encRecSize))
     encVelRec = np.zeros((2,encRecSize))
 
     # Constraints
@@ -119,7 +125,7 @@ class QuickBot():
     # === Class Methods ===
     # Constructor
     def __init__(self, baseIP, robotIP):
-        
+
         # Initialize GPIO pins
         GPIO.setup(self.dir1Pin[LEFT], GPIO.OUT)
         GPIO.setup(self.dir2Pin[LEFT], GPIO.OUT)
@@ -184,25 +190,38 @@ class QuickBot():
     def run(self):
         global RUN_FLAG
         self.encoderRead.start()
-        
-        try:
-            while RUN_FLAG == True:
-    #             tic()
-                self.update()
-                 
-                # Flash BBB LED
-                if self.ledFlag == True:
-                    self.ledFlag = False
-                    GPIO.output(self.ledPin, GPIO.HIGH)
-                else:
-                    self.ledFlag = True
-                    GPIO.output(self.ledPin, GPIO.LOW)
-                time.sleep(self.sampleTime)
-    #             toc("Run loop")
-        except:
-            RUN_FLAG = False
-            
-        self.cleanup()        
+
+        if DEBUG:
+                while RUN_FLAG == True:
+#                     tic()
+                    self.update()
+    
+                    # Flash BBB LED
+                    if self.ledFlag == True:
+                        self.ledFlag = False
+                        GPIO.output(self.ledPin, GPIO.HIGH)
+                    else:
+                        self.ledFlag = True
+                        GPIO.output(self.ledPin, GPIO.LOW)
+                    time.sleep(self.sampleTime)
+#                     toc("Run loop")
+        else:
+            try:
+                while RUN_FLAG == True:
+                    self.update()
+    
+                    # Flash BBB LED
+                    if self.ledFlag == True:
+                        self.ledFlag = False
+                        GPIO.output(self.ledPin, GPIO.HIGH)
+                    else:
+                        self.ledFlag = True
+                        GPIO.output(self.ledPin, GPIO.LOW)
+                    time.sleep(self.sampleTime)
+            except:
+                RUN_FLAG = False
+
+        self.cleanup()
         return
 
     def cleanup(self):
@@ -211,12 +230,12 @@ class QuickBot():
         self.robotSocket.close()
         GPIO.cleanup()
         PWM.cleanup()
-#         tictocPrint()     
+#         tictocPrint()
 #         self.writeBufferToFile()
 
-    def update(self):        
-        self.readIRValues()        
-        self.readEncoderValues()        
+    def update(self):
+        self.readIRValues()
+        self.readEncoderValues()
         self.parseCmdBuffer()
 
 
@@ -226,7 +245,7 @@ class QuickBot():
             line = self.robotSocket.recv(1024)
         except socket.error as msg:
             return
-        
+
         self.cmdBuffer += line
 
         bufferPattern = r'\$[^\$\*]*?\*' # String contained within $ and * symbols with no $ or * symbols in it
@@ -267,7 +286,7 @@ class QuickBot():
 
             elif msgResult.group('CMD') == 'ENVAL':
                 if msgResult.group('QUERY'):
-                    reply = '[' + ', '.join(map(str, self.encVal)) + ']'
+                    reply = '[' + ', '.join(map(str, self.encPos)) + ']'
                     print 'Sending: ' + reply
                     self.robotSocket.sendto(reply + '\n', (self.baseIP, self.port))
 
@@ -276,10 +295,10 @@ class QuickBot():
                     reply = '[' + ', '.join(map(str, self.encVel)) + ']'
                     print 'Sending: ' + reply
                     self.robotSocket.sendto(reply + '\n', (self.baseIP, self.port))
-                    
+
             elif msgResult.group('CMD') == 'RESET':
-                self.encVal[LEFT] = 0.0
-                self.encVal[RIGHT] = 0.0
+                self.encPos[LEFT] = 0.0
+                self.encPos[RIGHT] = 0.0
                 print 'Encoder values reset to [' + ', '.join(map(str, self.encVel)) + ']'
 
             elif msgResult.group('CMD') == 'UPDATE':
@@ -293,7 +312,7 @@ class QuickBot():
                         int(pwmRegex.match(args).group('RIGHT'))]
                         self.setPWM(pwm)
 
-                    reply = '[' + ', '.join(map(str, self.encVal)) + ', ' \
+                    reply = '[' + ', '.join(map(str, self.encPos)) + ', ' \
                       + ', '.join(map(str, self.encVel)) + ']'
                     print 'Sending: ' + reply
                     self.robotSocket.sendto(reply + '\n', (self.baseIP, self.port))
@@ -310,24 +329,24 @@ class QuickBot():
         self.irVal[self.ithIR] = ADC.read_raw(self.irPin[self.ithIR])
         time.sleep(ADCTIME)
         ADC_LOCK.release()
-        
+
         if self.irVal[self.ithIR] >= 1100:
                 self.irVal[self.ithIR] = prevVal
-        
+
         self.ithIR = ((self.ithIR+1) % 5)
-        
-            
+
+
     def readEncoderValues(self):
         self.encCnt = self.encCnt + 1;
         # Fill window
         for side in range(0,2):
             self.encTime[side] = self.encTimeWin[side][-1]
-            
+
             self.encBufInd0[side] = self.encBufInd1[side]
             self.encBufInd1[side] = ENC_IND[side]
             ind0 = self.encBufInd0[side] # starting index
             ind1 = self.encBufInd1[side] # ending index (this element is not included until the next update)
-            
+
             if ind0 < ind1:
                 N = ind1 - ind0 # number of elements
                 self.encSumN[side] = self.encSumN[side] + N
@@ -337,7 +356,7 @@ class QuickBot():
                 self.encValWin[side, -N:] = ENC_VAL[side][ind0:ind1]
                 self.encPWMWin[side] = np.roll(self.encPWMWin[side], -N)
                 self.encPWMWin[side, -N:] = [self.pwm[side]]*N
-                
+
             elif ind0 > ind1:
                 N = ENC_BUF_SIZE - ind0 + ind1 # number of elements
                 self.encSumN[side] = self.encSumN[side] + N
@@ -353,13 +372,13 @@ class QuickBot():
                     self.encValWin[side, -N:-ind1] = ENC_VAL[side][ind0:]
                     self.encTimeWin[side, -ind1:] = ENC_TIME[side][0:ind1]
                     self.encValWin[side, -ind1:] = ENC_VAL[side][0:ind1]
-                
-            if ind0 != ind1:                
+
+            if ind0 != ind1:
                 tauNew = self.encTimeWin[side,-1] - self.encTimeWin[side,-N]
                 self.encTau[side] = tauNew / self.encCnt + self.encTau[side] * (self.encCnt-1)/self.encCnt # Running average
                 if self.encSumN[side] > self.winSize:
                     self.countEncoderTicks(side)
-                    
+
                 # Fill records
                 ind = self.encRecInd[side]
                 if ind+N < self.encRecSize:
@@ -367,74 +386,137 @@ class QuickBot():
                     self.encValRec[side, ind:ind+N] = self.encValWin[side, -N:]
                     self.encPWMRec[side, ind:ind+N] = self.encPWMWin[side, -N:]
                     self.encNNewRec[side, ind:ind+N] = [N]*N
-                    self.encCntRec[side, ind:ind+N] = [self.encVal[side]]*N
+                    self.encPosRec[side, ind:ind+N] = [self.encPos[side]]*N
                     self.encVelRec[side, ind:ind+N] = [self.encVel[side]]*N
                 self.encRecInd[side] = ind+N
-             
+
     def countEncoderTicks(self,side):
+        # Set parameters
+        zeroInputHoldCnt = 2**4
+        highLowHighHoldCnt = 2**5
+        
         # Set variables
         t = self.encTimeWin[side] # Time vector of data (not consistent sampling time)
-        N = self.winSize # Number of samples
-        T = np.linspace(t[0],t[-1],N)  # Time vector of new resampled data (consistent sampling time)
-        Ts = np.mean(np.diff(T)) # Sampling time
+        tPrev = self.encTPrev[side] # Previous update time
+        pwm = self.encPWMWin[side] # PWM vector of data
+        input = pwm[-1] # Last pwm value applied
+        tickStatePrev = self.encTickState[side]  # Last state of tick (high (1), low (-1), or unsure(0))
+        tickCnt = self.encPos[side] # Current tick count
+        tickVel = self.encVel[side] # Current tick velocity
+        encValWin = self.encValWin[side] # Encoder raw value buffer
+        threshold = self.encThreshold[side] # Tick threshold
+        minPWMThreshold = self.minPWMThreshold[side] # Minimum PWM to move wheel
         
-        # Resample encoder values
-        y = np.interp(T,t,self.encValWin[side]) # Encoder resampled data
-        yBar = np.mean(y) # Average encoder values
+        N = sum(t > tPrev) # Number of new updates
         
-        # FFT
-        Fs = 1/Ts # Frequency sampling spacing
-        Y = np.fft.fft(y-yBar,self.winSize) / N # Frequency spectrum of y
-        f = Fs/2 * np.linspace(0,1,N/2+1) # Frequency vector
+        tickStateVec = np.roll(self.encTickStateVec[side], -N)
         
-        YMag = 2*np.abs(Y[0:N/2+1]) # Single sided amplitude spectrum
-        
-        # Extract highest magnitude frequency component
-        ind = np.argmax(YMag)
-        mag = YMag[ind]
-        freq = f[ind]
-        
-        freqRatio = mag / np.sum(YMag)  # Ratio of best frequency component energy to total energy in signal - Higher is better
-        
-        # Estimate tick velocity
-        uStar = np.mean(self.encPWMWin[side]) # Input operating point
-        
-        # omega - Measured tick velocity
-        if self.encVel[side] != 0:
-            omega = freq / self.ticksPerTurn * np.sign(self.encVel[side])
+        # Determine wheel direction
+        if tickVel != 0:
+            wheelDir = np.sign(tickVel)
         else:
-            omega = freq / self.ticksPerTurn * np.sign(uStar)
+            wheelDir = np.sign(input)
             
-        omegaStar = operatingPoint(uStar, self.minPWMThreshold) # Steady state tick velocity given current input                
-        z = omega - omegaStar # Measurement tick velocity error from steady state value
-        x = (self.encVel[side] / (self.ticksPerTurn)) - omegaStar # Previous state value (state = error from steady state value)
-        P = self.encVelVar[side] / (self.ticksPerTurn**2) # Previous state variance
-        A = -3 * 1 / self.vel95PrctRiseTime  # Continuous time state model matrix (xDot = A*x + B*u + w) (95% rise time)
-        Phi = np.exp(A * self.encTau[side])
-        H = 1; # Observation model matrix (z = H*x + v)
-        W = 0.15 # Process noise covariance
-        
-        # Input is 0 and velocity is small set measurement to 0 with no noise
-        # V - Measurement noise covariance
-        if np.abs(uStar) < self.minPWMThreshold and np.abs(x) < self.minTickVelThreshold:
-            z = 0
-            V = 0
-        else:
-            # Measurement noise is bigger when spike in frequency spectrum is less pronounced
-            V = max(0.1 - (freqRatio-.25)/8, 0.01);
+        # Count ticks and record tick state
+        indTuple = np.where(t == tPrev)
+        if len(indTuple[0] > 0):
+            ind = indTuple[0][0]
+            newInds = ind + np.arange(1,N+1)
+            for i in newInds:
+                if encValWin[i] > threshold:
+                    tickState = 1
+                    if tickStatePrev == -1:
+                        tickCnt = tickCnt + wheelDir
+                        
+                else:
+                    tickState = -1
+                tickStatePrev = tickState
+                tickStateVec[i] = tickState
+                
+            # Measure tick speed
+            diffTickStateVec = np.diff(tickStateVec) # Tick state transition differences
+            fallingTimes = t[np.hstack((False,diffTickStateVec == -2))] # Times when tick state goes from high to low
+            risingTimes = t[np.hstack((False,diffTickStateVec == 2))] # Times when tick state goes from low to high
+            fallingPeriods = np.diff(fallingTimes) # Period times between falling edges
+            risingPeriods = np.diff(risingTimes) # Period times between rising edges
+            tickPeriods = np.hstack((fallingPeriods, risingPeriods))
+            if len(tickPeriods) == 0:
+                if all(pwm[newInds] < minPWMThreshold): # If all inputs are less than min set velocity to 0
+                    tickVel = 0
+            else:
+                tickVel = wheelDir * 1/np.mean(tickPeriods) # Average tick frequency in wheel direction
             
-        # Kalman filter
-        (xPlus, PPlus) = kalman(x,P,Phi,H,W,V,z)
+            # Update variables
+            self.encPos[side] = tickCnt # New tick count
+            self.encVel[side] = tickVel # New tick velocity
+            self.encTickStateVec[side] = tickStateVec # New tick state vector
+        self.encTPrev[side] = t[-1] # New latest update time
+            
         
-        # Estimate tick velocity
-        self.encVel[side] = (xPlus + omegaStar) * self.ticksPerTurn
-        self.encVelVar[side] = PPlus * (self.ticksPerTurn**2)
         
-        # Count ticks        
-        ticksNew = self.encVel[side] * (t[-1] - self.encTime[side])
-        self.encVal[side] = ticksNew + self.encVal[side]        
-        
-    
+#         # Set variables
+#         t = self.encTimeWin[side] # Time vector of data (not consistent sampling time)
+#         N = self.winSize # Number of samples
+#         T = np.linspace(t[0],t[-1],N)  # Time vector of new resampled data (consistent sampling time)
+#         Ts = np.mean(np.diff(T)) # Sampling time
+# 
+#         # Resample encoder values
+#         y = np.interp(T,t,self.encValWin[side]) # Encoder resampled data
+#         yBar = np.mean(y) # Average encoder values
+# 
+#         # FFT
+#         Fs = 1/Ts # Frequency sampling spacing
+#         Y = np.fft.fft(y-yBar,self.winSize) / N # Frequency spectrum of y
+#         f = Fs/2 * np.linspace(0,1,N/2+1) # Frequency vector
+# 
+#         YMag = 2*np.abs(Y[0:N/2+1]) # Single sided amplitude spectrum
+# 
+#         # Extract highest magnitude frequency component
+#         ind = np.argmax(YMag)
+#         mag = YMag[ind]
+#         freq = f[ind]
+# 
+#         freqRatio = mag / np.sum(YMag)  # Ratio of best frequency component energy to total energy in signal - Higher is better
+# 
+#         # Estimate tick velocity
+#         uStar = np.mean(self.encPWMWin[side]) # Input operating point
+# 
+#         # omega - Measured tick velocity
+#         if self.encVel[side] != 0:
+#             omega = freq / self.ticksPerTurn * np.sign(self.encVel[side])
+#         else:
+#             omega = freq / self.ticksPerTurn * np.sign(uStar)
+# 
+#         omegaStar = operatingPoint(uStar, self.minPWMThreshold[side]) # Steady state tick velocity given current input
+#         z = omega - omegaStar # Measurement tick velocity error from steady state value
+#         x = (self.encVel[side] / (self.ticksPerTurn)) - omegaStar # Previous state value (state = error from steady state value)
+#         P = self.encVelVar[side] / (self.ticksPerTurn**2) # Previous state variance
+#         A = -3 * 1 / self.vel95PrctRiseTime  # Continuous time state model matrix (xDot = A*x + B*u + w) (95% rise time)
+#         Phi = np.exp(A * self.encTau[side])
+#         H = 1; # Observation model matrix (z = H*x + v)
+#         W = 0.15 # Process noise covariance
+# 
+#         # Input is 0 and velocity is small set measurement to 0 with no noise
+#         # V - Measurement noise covariance
+#         if np.abs(uStar) < self.minPWMThreshold[side] and np.abs(x) < self.minTickVelThreshold:
+#             z = 0
+#             V = 0
+#         else:
+#             # Measurement noise is bigger when spike in frequency spectrum is less pronounced
+#             V = max(0.1 - (freqRatio-.25)/8, 0.01);
+# 
+#         # Kalman filter
+#         (xPlus, PPlus) = kalman(x,P,Phi,H,W,V,z)
+# 
+#         # Estimate tick velocity
+#         self.encVel[side] = (xPlus + omegaStar) * self.ticksPerTurn
+#         self.encVelVar[side] = PPlus * (self.ticksPerTurn**2)
+# 
+#         # Count ticks
+#         ticksNew = self.encVel[side] * (t[-1] - self.encTime[side])
+#         self.encPos[side] = ticksNew + self.encPos[side]
+
+
     def writeBufferToFile(self):
         matrix = map(list, zip(*[self.encTimeRec[LEFT], self.encValRec[LEFT], self.encPWMRec[LEFT], self.encNNewRec[LEFT], \
                                  self.encTimeRec[RIGHT], self.encValRec[RIGHT], self.encPWMRec[RIGHT], self.encNNewRec[RIGHT]]))
@@ -446,34 +528,34 @@ class QuickBot():
         f.write('\n'.join(table))
         f.close()
         print "Wrote buffer to output.txt"
-            
+
 
 class encoderRead(threading.Thread):
     """The encoderRead Class"""
-    
+
     # === Class Properties ===
     # Parameters
-    
+
     # === Class Methods ===
     # Constructor
     def __init__(self,encPin=('P9_39', 'P9_37')):
-        
+
         # Initialize thread
         threading.Thread.__init__(self)
-        
+
         # Set properties
         self.encPin = encPin
-        
+
     # Methods
     def run(self):
         global RUN_FLAG
-        
+
         self.t0 = time.time()
         while RUN_FLAG:
             global ENC_IND
             global ENC_TIME
             global ENC_VAL
-            
+
             for side in range(0,2):
                 ENC_TIME[side][ENC_IND[side]] = time.time() - self.t0
                 ADC_LOCK.acquire()
@@ -481,22 +563,22 @@ class encoderRead(threading.Thread):
                 time.sleep(ADCTIME)
                 ADC_LOCK.release()
                 ENC_IND[side] = (ENC_IND[side] + 1) % ENC_BUF_SIZE
-                
+
 
 def operatingPoint(uStar, uStarThreshold):
     """ This function returns the steady state tick velocity given some PWM input.
-    
+
     uStar: PWM input.
     uStarThreshold: Threshold on the minimum magnitude of a PWM input value
-    
+
     returns: omegaStar - steady state tick velocity
     """
     # Matlab code to find beta values
     # X = [40; 80; 100]; % Air Test
     # Y = [0.85; 2.144; 3.5];
-    # 
+    #
     # r = 0.0325; % Wheel radius
-    # c = 2*pi*r; 
+    # c = 2*pi*r;
     # X = [  70;   70;   70;   75;   75;   75;   80;   80;   80; 85;     85;   85;   90;   90;   90]; % Ground Test
     # Z = [4.25; 3.95; 4.23; 3.67; 3.53; 3.48; 3.19; 3.08; 2.93; 2.52; 2.59; 2.56; 1.99; 2.02; 2.04]; % Time to go 1 m
     # Y = 1./(Z*c);
@@ -504,21 +586,21 @@ def operatingPoint(uStar, uStarThreshold):
     # beta = H \ Y
     # beta = [0.0425, -0.9504] # Air Test Results
     beta = [0.0606, -3.1475] # Ground Test Results
-    
+
     if np.abs(uStar) <= uStarThreshold:
         omegaStar = 0.0
     elif uStar > 0:
         omegaStar = beta[0]*uStar + beta[1]
     else:
         omegaStar = -1.0*(beta[0]*np.abs(uStar) + beta[1])
-        
+
     return omegaStar
-    
+
 
 def kalman(x, P, Phi, H, W, V, z):
-    """This function returns an optimal expected value of the state and covariance 
+    """This function returns an optimal expected value of the state and covariance
     error matrix given an update and system parameters.
-    
+
     x:   Estimate of staet at time t-1.
     P:   Estimate of error covariance matrix at time t-1.
     Phi: Discrete time state tranistion matrix at time t-1.
@@ -526,13 +608,13 @@ def kalman(x, P, Phi, H, W, V, z):
     W:   Process noise covariance at time t-1.
     V:   Measurement noise covariance at time t.
     z:   Measurement at time t.
-    
+
     returns: (x,P) tuple
     x: Updated estimate of state at time t.
-    P: Updated estimate of error covariance matrix at time t. 
-       
+    P: Updated estimate of error covariance matrix at time t.
+
     """
-    x_p = Phi*x # Prediction of setimated state vector    
+    x_p = Phi*x # Prediction of setimated state vector
     P_p = Phi*P*Phi + W # Prediction of error covariance matrix
     S = H*P_p*H + V # Sum of error variances
     S_inv = 1/S # Inverse of sum of error variances
@@ -551,33 +633,33 @@ def kalman(x, P, Phi, H, W, V, z):
 def tic():
     global TICTOC_START
     TICTOC_START = time.time()
-    
+
 def toc(tictocName='toc', printFlag=True):
     global TICTOC_START
     global TICTOC_COUNT
     global TICTOC_MEAN
     global TICTOC_MAX
     global TICTOC_MIN
-       
+
     tictocTime = time.time() - TICTOC_START
     TICTOC_COUNT = TICTOC_COUNT + 1
     TICTOC_MEAN = tictocTime / TICTOC_COUNT + TICTOC_MEAN * (TICTOC_COUNT-1) / TICTOC_COUNT
     TICTOC_MAX = max(TICTOC_MAX,tictocTime)
     TICTOC_MIN = min(TICTOC_MIN,tictocTime)
-    
+
     if printFlag:
         print tictocName + " time: " + str(tictocTime)
-        
+
 def tictocPrint():
     global TICTOC_COUNT
     global TICTOC_MEAN
     global TICTOC_MAX
     global TICTOC_MIN
-    
+
     print "Tic Toc Stats:"
     print "Count = " + str(TICTOC_COUNT)
     print "Mean = " + str(TICTOC_MEAN)
     print "Max = " + str(TICTOC_MAX)
     print "Min = " + str(TICTOC_MIN)
 
-            
+
