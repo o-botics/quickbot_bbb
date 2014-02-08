@@ -2,8 +2,10 @@
 """
 @brief QuickBot class for Beaglebone Black
 
-@author Rowland O'Flaherty
-@date 08/27/2013
+@author Rowland O'Flaherty (rowlandoflaherty.com)
+@date 02/07/2014
+@version: 1.0
+@license: The MIT License (MIT) (see LINENSE file)
 """
 import os
 import sys
@@ -156,7 +158,6 @@ class QuickBot():
 
         self.pwm[LEFT] = min(max(pwm[LEFT], self.pwmLimits[MIN]), self.pwmLimits[MAX])
         self.pwm[RIGHT] = min(max(pwm[RIGHT], self.pwmLimits[MIN]), self.pwmLimits[MAX])
-        print 'Setting motor PWMs to: left = ' + str(self.pwm[LEFT]) + ' and right = ' + str(self.pwm[RIGHT])
 
         # Left motor
         if self.pwm[LEFT] > 0:
@@ -451,70 +452,6 @@ class QuickBot():
             self.encVel[side] = tickVel # New tick velocity
             self.encTickStateVec[side] = tickStateVec # New tick state vector
         self.encTPrev[side] = t[-1] # New latest update time
-            
-        
-        
-#         # Set variables
-#         t = self.encTimeWin[side] # Time vector of data (not consistent sampling time)
-#         N = self.winSize # Number of samples
-#         T = np.linspace(t[0],t[-1],N)  # Time vector of new resampled data (consistent sampling time)
-#         Ts = np.mean(np.diff(T)) # Sampling time
-# 
-#         # Resample encoder values
-#         y = np.interp(T,t,self.encValWin[side]) # Encoder resampled data
-#         yBar = np.mean(y) # Average encoder values
-# 
-#         # FFT
-#         Fs = 1/Ts # Frequency sampling spacing
-#         Y = np.fft.fft(y-yBar,self.winSize) / N # Frequency spectrum of y
-#         f = Fs/2 * np.linspace(0,1,N/2+1) # Frequency vector
-# 
-#         YMag = 2*np.abs(Y[0:N/2+1]) # Single sided amplitude spectrum
-# 
-#         # Extract highest magnitude frequency component
-#         ind = np.argmax(YMag)
-#         mag = YMag[ind]
-#         freq = f[ind]
-# 
-#         freqRatio = mag / np.sum(YMag)  # Ratio of best frequency component energy to total energy in signal - Higher is better
-# 
-#         # Estimate tick velocity
-#         uStar = np.mean(self.encPWMWin[side]) # Input operating point
-# 
-#         # omega - Measured tick velocity
-#         if self.encVel[side] != 0:
-#             omega = freq / self.ticksPerTurn * np.sign(self.encVel[side])
-#         else:
-#             omega = freq / self.ticksPerTurn * np.sign(uStar)
-# 
-#         omegaStar = operatingPoint(uStar, self.minPWMThreshold[side]) # Steady state tick velocity given current input
-#         z = omega - omegaStar # Measurement tick velocity error from steady state value
-#         x = (self.encVel[side] / (self.ticksPerTurn)) - omegaStar # Previous state value (state = error from steady state value)
-#         P = self.encVelVar[side] / (self.ticksPerTurn**2) # Previous state variance
-#         A = -3 * 1 / self.vel95PrctRiseTime  # Continuous time state model matrix (xDot = A*x + B*u + w) (95% rise time)
-#         Phi = np.exp(A * self.encTau[side])
-#         H = 1; # Observation model matrix (z = H*x + v)
-#         W = 0.15 # Process noise covariance
-# 
-#         # Input is 0 and velocity is small set measurement to 0 with no noise
-#         # V - Measurement noise covariance
-#         if np.abs(uStar) < self.minPWMThreshold[side] and np.abs(x) < self.minTickVelThreshold:
-#             z = 0
-#             V = 0
-#         else:
-#             # Measurement noise is bigger when spike in frequency spectrum is less pronounced
-#             V = max(0.1 - (freqRatio-.25)/8, 0.01);
-# 
-#         # Kalman filter
-#         (xPlus, PPlus) = kalman(x,P,Phi,H,W,V,z)
-# 
-#         # Estimate tick velocity
-#         self.encVel[side] = (xPlus + omegaStar) * self.ticksPerTurn
-#         self.encVelVar[side] = PPlus * (self.ticksPerTurn**2)
-# 
-#         # Count ticks
-#         ticksNew = self.encVel[side] * (t[-1] - self.encTime[side])
-#         self.encPos[side] = ticksNew + self.encPos[side]
 
 
     def writeBufferToFile(self):
