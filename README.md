@@ -2,7 +2,7 @@
 This is the code that runs on the BeagleBone Black to control the QuickBot.
 
 ## Overview
-Essentially this code establishes UDP socket connection with another device (BASE) and waits for commands. The commands are either of the form of directives or queries. An example directive is setting the PWM values of the motors. Example query is getting IR sensor values.
+Essentially this code establishes socket (UDP) connection with another device (BASE) and waits for commands. The commands are either of the form of directives or queries. An example directive is setting the PWM values of the motors. An example query is getting IR sensor values.
 
 ## Installation
 Clone the repo into home directory:
@@ -41,60 +41,60 @@ Launch QuickBotRun python script using IP addresses of BASE and ROBOT:
 * Check that the QuickBot is up and running:
  * Command
 
-	"$CHECK*\n"
+		"$CHECK*\n"
 	
  * Response
 	
-	"Hello from QuickBot\n"
+		"Hello from QuickBot\n"
 	
 * Get PWM values:
  * Command
 
-	"$PWM?*\n"
+		"$PWM?*\n"
 	
  * Example response
 	
-	"[50, -50]\n"
+		"[50, -50]\n"
 	
 * Set PWM values:
  * Command
 
-	"$PWM=[-100,100]*\n"
+		"$PWM=[-100,100]*\n"
 	
 * Get IR values:
  * Command
 
-	"$IRVAL?*\n"
+		"$IRVAL?*\n"
 	
  * Example response
 	
-	"[800, 810, 820, 830, 840]\n"
+		"[800, 810, 820, 830, 840]\n"
 	
 * Get encoder position:
  * Command
 
-	"$ENVAL?*\n"
+		"$ENVAL?*\n"
 	
  * Example response
 	
-	"[200, -200]\n"
+		"[200, -200]\n"
 	
 * Get encoder velocity (tick velocity -- 16 ticks per rotation):
  * Command
 
-	"$ENVEL?*\n"
+		"$ENVEL?*\n"
 	
  * Example response
 	
-	"[20.0, -20.0]\n"
+		"[20.0, -20.0]\n"
 	
 * Reset encoder position to zero:
  * Command
 
-	"$RESET*\n"
+		"$RESET*\n"
 	
 * End program
  * Command:
  
- 	"$END*\n"
+ 		"$END*\n"
 	

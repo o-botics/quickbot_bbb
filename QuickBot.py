@@ -5,8 +5,9 @@
 @author Rowland O'Flaherty (rowlandoflaherty.com)
 @date 02/07/2014
 @version: 1.0
-@license: The MIT License (MIT) (see LINENSE file)
+@copyright: Copyright (C) 2014, Georgia Tech Research Corporation see the LICENSE file included with this software (see LINENSE file)
 """
+
 import os
 import sys
 import time
@@ -47,7 +48,7 @@ ADC_LOCK = threading.Lock()
 RUN_FLAG = True
 RUN_FLAG_LOCK = threading.Lock()
 
-DEBUG = True
+DEBUG = False
 
 class QuickBot():
     """The QuickBot Class"""
