@@ -6,27 +6,27 @@ Essentially this code establishes socket (UDP) connection with another device (B
 
 ## Installation
 Clone the repo into home directory:
-	
+
 	cd ~
 	git clone https://bitbucket.org/rowoflo/quickbot_bbb.git
-	
+
 ## Running
 Check IP address of BASE and ROBOT (run command on both systems and look for IP address):
-	
+
 	ifconfig
-	
+
 Example output from BBB:
 
-	ra0       Link encap:Ethernet  HWaddr 00:0C:43:00:14:F8  
+	ra0       Link encap:Ethernet  HWaddr 00:0C:43:00:14:F8
 	          inet addr:192.168.1.101  Bcast:192.168.1.255  Mask:255.255.255.0
 	          inet6 addr: fe80::20c:43ff:fe00:14f8/64 Scope:Link
 	          UP BROADCAST RUNNING MULTICAST  MTU:1500  Metric:1
 	          RX packets:315687 errors:1113 dropped:1 overruns:0 frame:0
 	          TX packets:12321 errors:0 dropped:0 overruns:0 carrier:0
-	          collisions:0 txqueuelen:1000 
+	          collisions:0 txqueuelen:1000
 	          RX bytes:66840454 (63.7 MiB)  TX bytes:1878384 (1.7 MiB)
-	          
-Here the IP address for the robot is 192.168.1.101. Let's assume the IP address for the BASE is 192.168.1.100.          
+
+Here the IP address for the robot is 192.168.1.101. Let's assume the IP address for the BASE is 192.168.1.100.
 
 Change into working directory:
 
@@ -36,65 +36,72 @@ Launch QuickBotRun python script using IP addresses of BASE and ROBOT:
 
 	./QuickBotRun.py 192.168.1.100 192.168.1.101
 
-## Instruction Set
+## Command Set
 
 * Check that the QuickBot is up and running:
- * Command
+  * Command
 
 		"$CHECK*\n"
-	
- * Response
-	
+
+  * Response
+
 		"Hello from QuickBot\n"
-	
+
+
 * Get PWM values:
- * Command
+  * Command
 
 		"$PWM?*\n"
-	
- * Example response
-	
+
+  * Example response
+
 		"[50, -50]\n"
-	
+
+
 * Set PWM values:
- * Command
+  * Command
 
 		"$PWM=[-100,100]*\n"
-	
+
+
 * Get IR values:
- * Command
+  * Command
 
 		"$IRVAL?*\n"
-	
- * Example response
-	
+
+  * Example response
+
 		"[800, 810, 820, 830, 840]\n"
-	
+
+
 * Get encoder position:
- * Command
+  * Command
 
 		"$ENVAL?*\n"
-	
- * Example response
-	
+
+  * Example response
+
 		"[200, -200]\n"
-	
+
+
 * Get encoder velocity (tick velocity -- 16 ticks per rotation):
- * Command
+  * Command
 
 		"$ENVEL?*\n"
-	
- * Example response
-	
+
+  * Example response
+
 		"[20.0, -20.0]\n"
-	
+
+
 * Reset encoder position to zero:
- * Command
+  * Command
 
 		"$RESET*\n"
-	
+
+
 * End program
- * Command:
- 
+  * Command:
+
  		"$END*\n"
-	
+
