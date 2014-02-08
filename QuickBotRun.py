@@ -5,7 +5,7 @@
 @author Rowland O'Flaherty (rowlandoflaherty.com)
 @date 02/07/2014
 @version: 1.0
-@license: The MIT License (MIT) (see LINENSE file)
+@copyright: Copyright (C) 2014, Georgia Tech Research Corporation see the LICENSE file included with this software (see LINENSE file)
 """
 
 import sys
