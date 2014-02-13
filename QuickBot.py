@@ -27,7 +27,7 @@ RIGHT = 1
 MIN = 0
 MAX = 1
 
-DEBUG = True
+DEBUG = False
 
 ADCTIME = 0.001
 
@@ -109,21 +109,9 @@ class QuickBot():
     encZeroMean = [0.0, 0.0]
     encZeroVar = [0.0, 0.0]
     encZeroCnt = [0, 0]
-
-    ## Stats of encoder values while moving -- high, low, and all tick state
-    encHighLowCntMin = 2**5  # Min number of recorded values to start calculating stats
-    encHighMean = [0.0, 0.0]
-    encHighVar = [0.0, 0.0]
     encHighCnt = [0, 0]
-
-    encLowMean = [0.0, 0.0]
-    encLowVar = [0.0, 0.0]
     encLowCnt = [0, 0]
-
-    encNonZeroCntMin = 2**5
-    encNonZeroMean = [0.0, 0.0]
-    encNonZeroVar = [0.0, 0.0]
-    encNonZeroCnt = [0, 0]
+    encLowCntMin = 2
 
     # Variables
     ledFlag = True
@@ -164,8 +152,24 @@ class QuickBot():
         self.robotIP = robotIP
         self.robotSocket.bind((self.robotIP, self.port))
 
-        # Record variables
+        
         if DEBUG:
+            ## Stats of encoder values while moving -- high, low, and all tick state
+            self.encHighLowCntMin = 2**5  # Min number of recorded values to start calculating stats
+            self.encHighMean = [0.0, 0.0]
+            self.encHighVar = [0.0, 0.0]
+            self.encHighTotalCnt = [0, 0]
+        
+            self.encLowMean = [0.0, 0.0]
+            self.encLowVar = [0.0, 0.0]
+            self.encLowTotalCnt = [0, 0]
+        
+            self.encNonZeroCntMin = 2**5
+            self.encNonZeroMean = [0.0, 0.0]
+            self.encNonZeroVar = [0.0, 0.0]
+            self.encNonZeroCnt = [0, 0]
+
+            # Record variables
             self.encRecSize = 2**13
             self.encRecInd = [0, 0]
             self.encTimeRec = np.zeros((2, self.encRecSize))
@@ -174,6 +178,8 @@ class QuickBot():
             self.encNNewRec = np.zeros((2, self.encRecSize))
             self.encPosRec = np.zeros((2, self.encRecSize))
             self.encVelRec = np.zeros((2, self.encRecSize))
+            self.encTickStateRec = np.zeros((2, self.encRecSize))
+            self.encThresholdRec = np.zeros((2, self.encRecSize))
 
     # Getters and Setters
     def setPWM(self, pwm):
@@ -246,7 +252,7 @@ class QuickBot():
         if DEBUG:
             # tictocPrint()
             self.writeBuffersToFile()
-        sys.stdout.write("done\n")
+        sys.stdout.write("Done\n")
 
     def update(self):
         self.readIRValues()
@@ -365,11 +371,11 @@ class QuickBot():
             print "NonZero Mean: " + str(self.encNonZeroMean)
             print "NonZero Var:  " + str(self.encNonZeroVar)
             print "***"
-            print "High Cnt:  " + str(self.encHighCnt)
+            print "High Cnt:  " + str(self.encHighTotalCnt)
             print "High Mean: " + str(self.encHighMean)
             print "High Var:  " + str(self.encHighVar)
             print "***"
-            print "Low Cnt:  " + str(self.encLowCnt)
+            print "Low Cnt:  " + str(self.encLowTotalCnt)
             print "Low Mean: " + str(self.encLowMean)
             print "Low Var:  " + str(self.encLowVar)
 
@@ -417,15 +423,18 @@ class QuickBot():
                     self.countEncoderTicks(side)
 
                 # Fill records
-                ind = self.encRecInd[side]
-                if ind+N < self.encRecSize:
-                    self.encTimeRec[side, ind:ind+N] = self.encTimeWin[side, -N:]
-                    self.encValRec[side, ind:ind+N] = self.encValWin[side, -N:]
-                    self.encPWMRec[side, ind:ind+N] = self.encPWMWin[side, -N:]
-                    self.encNNewRec[side, ind:ind+N] = [N]*N
-                    self.encPosRec[side, ind:ind+N] = [self.encPos[side]]*N
-                    self.encVelRec[side, ind:ind+N] = [self.encVel[side]]*N
-                self.encRecInd[side] = ind+N
+                if DEBUG:
+                    ind = self.encRecInd[side]
+                    if ind+N < self.encRecSize:
+                        self.encTimeRec[side, ind:ind+N] = self.encTimeWin[side, -N:]
+                        self.encValRec[side, ind:ind+N] = self.encValWin[side, -N:]
+                        self.encPWMRec[side, ind:ind+N] = self.encPWMWin[side, -N:]
+                        self.encNNewRec[side, ind:ind+N] = [N]*N
+                        self.encPosRec[side, ind:ind+N] = [self.encPos[side]]*N
+                        self.encVelRec[side, ind:ind+N] = [self.encVel[side]]*N
+                        self.encTickStateRec[side, ind:ind+N] = self.encTickStateVec[side, -N:]
+                        self.encThresholdRec[side, ind:ind+N] = [self.encThreshold[side]]*N
+                    self.encRecInd[side] = ind+N
 
     def countEncoderTicks(self, side):
         # Set variables
@@ -458,11 +467,15 @@ class QuickBot():
             for i in newInds:
                 if encValWin[i] > threshold:  # High tick state
                     tickState = 1
+                    self.encHighCnt[side] = self.encHighCnt[side] + 1
+                    self.encLowCnt[side] = 0
                     if tickStatePrev == -1:  # Increment tick count on rising edge
                         tickCnt = tickCnt + wheelDir
 
                 else:  # Low tick state
                     tickState = -1
+                    self.encLowCnt[side] = self.encLowCnt[side] + 1
+                    self.encHighCnt[side] = 0
                 tickStatePrev = tickState
                 tickStateVec[i] = tickState
 
@@ -505,25 +518,25 @@ class QuickBot():
                     if NHigh != 0:
                         indHighTuple = np.where(tickStateVec[newInds] == 1)
                         x = newEncRaw[indHighTuple[0]]
-                        l = self.encHighCnt[side]
+                        l = self.encHighTotalCnt[side]
                         mu = self.encHighMean[side]
                         sigma2 = self.encHighVar[side]
                         (muPlus, sigma2Plus, n) = recursiveMeanVar(x, l, mu, sigma2)
                         self.encHighMean[side] = muPlus
                         self.encHighVar[side] = sigma2Plus
-                        self.encHighCnt[side] = n
+                        self.encHighTotalCnt[side] = n
 
                     NLow = np.sum(tickStateVec[newInds] == -1)
                     if NLow != 0:
                         indLowTuple = np.where(tickStateVec[newInds] == -1)
                         x = newEncRaw[indLowTuple[0]]
-                        l = self.encLowCnt[side]
+                        l = self.encLowTotalCnt[side]
                         mu = self.encLowMean[side]
                         sigma2 = self.encLowVar[side]
                         (muPlus, sigma2Plus, n) = recursiveMeanVar(x, l, mu, sigma2)
                         self.encLowMean[side] = muPlus
                         self.encLowVar[side] = sigma2Plus
-                        self.encLowCnt[side] = n
+                        self.encLowTotalCnt[side] = n
 
             # Set threshold value
             if self.encZeroCnt[side] > self.encZeroCntMin:
@@ -532,7 +545,7 @@ class QuickBot():
 #             elif self.encNonZeroCnt[side] > self.encNonZeroCntMin:
 #                 self.encThreshold[side] = self.encNonZeroMean[side]
 
-#             elif self.encHighCnt[side] > self.encHighLowCntMin and self.encLowCnt > self.encHighLowCntMin:
+#             elif self.encHighTotalCnt[side] > self.encHighLowCntMin and self.encLowTotalCnt > self.encHighLowCntMin:
 #                 mu1 = self.encHighMean[side]
 #                 sigma1 = self.encHighVar[side]
 #                 mu2 = self.encLowMean[side]
@@ -559,7 +572,9 @@ class QuickBot():
 
     def writeBuffersToFile(self):
         matrix = map(list, zip(*[self.encTimeRec[LEFT], self.encValRec[LEFT], self.encPWMRec[LEFT], self.encNNewRec[LEFT], \
-                                 self.encTimeRec[RIGHT], self.encValRec[RIGHT], self.encPWMRec[RIGHT], self.encNNewRec[RIGHT]]))
+                                 self.encTickStateRec[LEFT], self.encPosRec[LEFT], self.encVelRec[LEFT], self.encThresholdRec[LEFT], \
+                                 self.encTimeRec[RIGHT], self.encValRec[RIGHT], self.encPWMRec[RIGHT], self.encNNewRec[RIGHT], \
+                                 self.encTickStateRec[RIGHT], self.encPosRec[RIGHT], self.encVelRec[RIGHT], self.encThresholdRec[RIGHT]]))
         s = [[str(e) for e in row] for row in matrix]
         lens = [len(max(col, key=len)) for col in zip(*s)]
         fmt = '\t'.join('{{:{}}}'.format(x) for x in lens)
