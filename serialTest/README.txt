@@ -1,3 +1,7 @@
+The "serialTest.py" script sends a "hello" message over ttyO4.
+
+If serial is not working run the "serialSetup.sh", which performs the commands discussed below.
+
 http://www.armhf.com/index.php/beaglebone-black-serial-uart-device-tree-overlays-for-ubuntu-and-debian-wheezy-tty01-tty02-tty04-tty05-dtbo-files/
 
 Copy the following .dtbo overlay files to the /lib/firmware directory and apply them after each boot with the command: echo ttyO1_armhf.com > /sys/devices/bone_capemgr*/slots
