@@ -62,9 +62,9 @@ class QuickBot():
     ledPin = 'USR1'
 
     # Motor Pins -- (LEFT, RIGHT)
-    dir1Pin = ('P8_12', 'P8_14')
-    dir2Pin = ('P8_10', 'P8_16')
-    pwmPin = ('P9_14', 'P9_16')
+    dir1Pin = ('P8_14', 'P8_12')
+    dir2Pin = ('P8_16', 'P8_10')
+    pwmPin = ('P9_16', 'P9_14')
 
     # ADC Pins
     irPin = ('P9_38', 'P9_40', 'P9_36', 'P9_35', 'P9_33')
