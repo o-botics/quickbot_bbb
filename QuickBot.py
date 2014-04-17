@@ -31,27 +31,28 @@ DEBUG = False
 
 ADCTIME = 0.001
 
-## Tic toc constants
+# Tic toc constants
 TICTOC_START = 0
 TICTOC_COUNT = 0
 TICTOC_MEAN = 0
 TICTOC_MAX = -float('inf')
 TICTOC_MIN = float('inf')
 
-## Encoder buffer constants and variables
-ENC_BUF_SIZE = 2**9
+# Encoder buffer constants and variables
+ENC_BUF_SIZE = 2 ** 9
 ENC_IND = [0, 0]
-ENC_TIME = [[0]*ENC_BUF_SIZE, [0]*ENC_BUF_SIZE]
-ENC_VAL = [[0]*ENC_BUF_SIZE, [0]*ENC_BUF_SIZE]
+ENC_TIME = [[0] * ENC_BUF_SIZE, [0] * ENC_BUF_SIZE]
+ENC_VAL = [[0] * ENC_BUF_SIZE, [0] * ENC_BUF_SIZE]
 
 ADC_LOCK = threading.Lock()
 
-## Run variables
+# Run variables
 RUN_FLAG = True
 RUN_FLAG_LOCK = threading.Lock()
 
 
 class QuickBot():
+
     """The QuickBot Class"""
 
     # === Class Properties ===
@@ -72,7 +73,7 @@ class QuickBot():
 
     # Encoder counting parameter and variables
     ticksPerTurn = 16  # Number of ticks on encoder disc
-    encWinSize = 2**5  # Should be power of 2
+    encWinSize = 2 ** 5  # Should be power of 2
     minPWMThreshold = [45, 45]  # Threshold on the minimum value to turn wheel
     encTPrev = [0.0, 0.0]
     encThreshold = [0.0, 0.0]
@@ -99,13 +100,17 @@ class QuickBot():
     encSumN = [0, 0]  # Sum of total encoder samples
     encBufInd0 = [0, 0]  # Index of beginning of new samples in buffer
     encBufInd1 = [0, 0]  # Index of end of new samples in buffer
-    encTimeWin = np.zeros((2, encWinSize))  # Moving window of encoder sample times
-    encValWin = np.zeros((2, encWinSize))  # Moving window of encoder raw sample values
-    encPWMWin = np.zeros((2, encWinSize))  # Moving window corresponding PWM input values
+    # Moving window of encoder sample times
+    encTimeWin = np.zeros((2, encWinSize))
+    # Moving window of encoder raw sample values
+    encValWin = np.zeros((2, encWinSize))
+    # Moving window corresponding PWM input values
+    encPWMWin = np.zeros((2, encWinSize))
     encTau = [0.0, 0.0]  # Average sampling time of encoders
 
-    ## Stats of encoder values while input = 0 and vel = 0
-    encZeroCntMin = 2**4  # Min number of recorded values to start calculating stats
+    # Stats of encoder values while input = 0 and vel = 0
+    # Min number of recorded values to start calculating stats
+    encZeroCntMin = 2 ** 4
     encZeroMean = [0.0, 0.0]
     encZeroVar = [0.0, 0.0]
     encZeroCnt = [0, 0]
@@ -152,25 +157,26 @@ class QuickBot():
         self.robotIP = robotIP
         self.robotSocket.bind((self.robotIP, self.port))
 
-        
         if DEBUG:
-            ## Stats of encoder values while moving -- high, low, and all tick state
-            self.encHighLowCntMin = 2**5  # Min number of recorded values to start calculating stats
+            # Stats of encoder values while moving -- high, low, and all tick
+            # state
+            # Min number of recorded values to start calculating stats
+            self.encHighLowCntMin = 2 ** 5
             self.encHighMean = [0.0, 0.0]
             self.encHighVar = [0.0, 0.0]
             self.encHighTotalCnt = [0, 0]
-        
+
             self.encLowMean = [0.0, 0.0]
             self.encLowVar = [0.0, 0.0]
             self.encLowTotalCnt = [0, 0]
-        
-            self.encNonZeroCntMin = 2**5
+
+            self.encNonZeroCntMin = 2 ** 5
             self.encNonZeroMean = [0.0, 0.0]
             self.encNonZeroVar = [0.0, 0.0]
             self.encNonZeroCnt = [0, 0]
 
             # Record variables
-            self.encRecSize = 2**13
+            self.encRecSize = 2 ** 13
             self.encRecInd = [0, 0]
             self.encTimeRec = np.zeros((2, self.encRecSize))
             self.encValRec = np.zeros((2, self.encRecSize))
@@ -268,7 +274,8 @@ class QuickBot():
 
         self.cmdBuffer += line
 
-        bufferPattern = r'\$[^\$\*]*?\*'  # String contained within $ and * symbols with no $ or * symbols in it
+        # String contained within $ and * symbols with no $ or * symbols in it
+        bufferPattern = r'\$[^\$\*]*?\*'
         bufferRegex = re.compile(bufferPattern)
         bufferResult = bufferRegex.search(self.cmdBuffer)
 
@@ -282,11 +289,13 @@ class QuickBot():
             msgResult = msgRegex.search(msg)
 
             if msgResult.group('CMD') == 'CHECK':
-                self.robotSocket.sendto('Hello from QuickBot\n',(self.baseIP, self.port))
+                self.robotSocket.sendto(
+                    'Hello from QuickBot\n', (self.baseIP, self.port))
 
             elif msgResult.group('CMD') == 'PWM':
                 if msgResult.group('QUERY'):
-                    self.robotSocket.sendto(str(self.pwm) + '\n',(self.baseIP, self.port))
+                    self.robotSocket.sendto(
+                        str(self.pwm) + '\n', (self.baseIP, self.port))
 
                 elif msgResult.group('SET') and msgResult.group('ARGS'):
                     args = msgResult.group('ARGS')
@@ -295,26 +304,29 @@ class QuickBot():
                     pwmResult = pwmRegex.match(args)
                     if pwmResult:
                         pwm = [int(pwmRegex.match(args).group('LEFT')),
-                            int(pwmRegex.match(args).group('RIGHT'))]
+                               int(pwmRegex.match(args).group('RIGHT'))]
                         self.setPWM(pwm)
 
             elif msgResult.group('CMD') == 'IRVAL':
                 if msgResult.group('QUERY'):
                     reply = '[' + ', '.join(map(str, self.irVal)) + ']'
                     print 'Sending: ' + reply
-                    self.robotSocket.sendto(reply + '\n', (self.baseIP, self.port))
+                    self.robotSocket.sendto(
+                        reply + '\n', (self.baseIP, self.port))
 
             elif msgResult.group('CMD') == 'ENVAL':
                 if msgResult.group('QUERY'):
                     reply = '[' + ', '.join(map(str, self.encPos)) + ']'
                     print 'Sending: ' + reply
-                    self.robotSocket.sendto(reply + '\n', (self.baseIP, self.port))
+                    self.robotSocket.sendto(
+                        reply + '\n', (self.baseIP, self.port))
 
             elif msgResult.group('CMD') == 'ENVEL':
                 if msgResult.group('QUERY'):
                     reply = '[' + ', '.join(map(str, self.encVel)) + ']'
                     print 'Sending: ' + reply
-                    self.robotSocket.sendto(reply + '\n', (self.baseIP, self.port))
+                    self.robotSocket.sendto(
+                        reply + '\n', (self.baseIP, self.port))
 
             elif msgResult.group('CMD') == 'RESET':
                 self.encPos[LEFT] = 0.0
@@ -329,13 +341,14 @@ class QuickBot():
                     pwmResult = pwmRegex.match(args)
                     if pwmResult:
                         pwm = [int(pwmRegex.match(args).group('LEFT')),
-                            int(pwmRegex.match(args).group('RIGHT'))]
+                               int(pwmRegex.match(args).group('RIGHT'))]
                         self.setPWM(pwm)
 
                     reply = '[' + ', '.join(map(str, self.encPos)) + ', ' \
                         + ', '.join(map(str, self.encVel)) + ']'
                     print 'Sending: ' + reply
-                    self.robotSocket.sendto(reply + '\n', (self.baseIP, self.port))
+                    self.robotSocket.sendto(
+                        reply + '\n', (self.baseIP, self.port))
 
             elif msgResult.group('CMD') == 'END':
                 RUN_FLAG_LOCK.acquire()
@@ -350,10 +363,9 @@ class QuickBot():
         ADC_LOCK.release()
 
         if self.irVal[self.ithIR] >= 1100:
-                self.irVal[self.ithIR] = prevVal
+            self.irVal[self.ithIR] = prevVal
 
-        self.ithIR = ((self.ithIR+1) % 5)
-
+        self.ithIR = ((self.ithIR + 1) % 5)
 
     def readEncoderValues(self):
         if DEBUG and (self.encCnt % 10) == 0:
@@ -388,7 +400,8 @@ class QuickBot():
             self.encBufInd0[side] = self.encBufInd1[side]
             self.encBufInd1[side] = ENC_IND[side]
             ind0 = self.encBufInd0[side]  # starting index
-            ind1 = self.encBufInd1[side]  # ending index (this element is not included until the next update)
+            # ending index (this element is not included until the next update)
+            ind1 = self.encBufInd1[side]
 
             if ind0 < ind1:
                 N = ind1 - ind0  # number of new elements
@@ -398,7 +411,7 @@ class QuickBot():
                 self.encValWin[side] = np.roll(self.encValWin[side], -N)
                 self.encValWin[side, -N:] = ENC_VAL[side][ind0:ind1]
                 self.encPWMWin[side] = np.roll(self.encPWMWin[side], -N)
-                self.encPWMWin[side, -N:] = [self.pwm[side]]*N
+                self.encPWMWin[side, -N:] = [self.pwm[side]] * N
 
             elif ind0 > ind1:
                 N = ENC_BUF_SIZE - ind0 + ind1  # number of new elements
@@ -406,7 +419,7 @@ class QuickBot():
                 self.encTimeWin[side] = np.roll(self.encTimeWin[side], -N)
                 self.encValWin[side] = np.roll(self.encValWin[side], -N)
                 self.encPWMWin[side] = np.roll(self.encPWMWin[side], -N)
-                self.encPWMWin[side, -N:] = [self.pwm[side]]*N
+                self.encPWMWin[side, -N:] = [self.pwm[side]] * N
                 if ind1 == 0:
                     self.encTimeWin[side, -N:] = ENC_TIME[side][ind0:]
                     self.encValWin[side, -N:] = ENC_VAL[side][ind0:]
@@ -417,37 +430,48 @@ class QuickBot():
                     self.encValWin[side, -ind1:] = ENC_VAL[side][0:ind1]
 
             if ind0 != ind1:
-                tauNew = self.encTimeWin[side,-1] - self.encTimeWin[side,-N]
-                self.encTau[side] = tauNew / self.encCnt + self.encTau[side] * (self.encCnt-1)/self.encCnt  # Running average
+                tauNew = self.encTimeWin[side, -1] - self.encTimeWin[side, -N]
+                self.encTau[side] = tauNew / self.encCnt + self.encTau[side] * \
+                    (self.encCnt - 1) / self.encCnt  # Running average
                 if self.encSumN[side] > self.encWinSize:
                     self.countEncoderTicks(side)
 
                 # Fill records
                 if DEBUG:
                     ind = self.encRecInd[side]
-                    if ind+N < self.encRecSize:
-                        self.encTimeRec[side, ind:ind+N] = self.encTimeWin[side, -N:]
-                        self.encValRec[side, ind:ind+N] = self.encValWin[side, -N:]
-                        self.encPWMRec[side, ind:ind+N] = self.encPWMWin[side, -N:]
-                        self.encNNewRec[side, ind:ind+N] = [N]*N
-                        self.encPosRec[side, ind:ind+N] = [self.encPos[side]]*N
-                        self.encVelRec[side, ind:ind+N] = [self.encVel[side]]*N
-                        self.encTickStateRec[side, ind:ind+N] = self.encTickStateVec[side, -N:]
-                        self.encThresholdRec[side, ind:ind+N] = [self.encThreshold[side]]*N
-                    self.encRecInd[side] = ind+N
+                    if ind + N < self.encRecSize:
+                        self.encTimeRec[
+                            side, ind:ind + N] = self.encTimeWin[side, -N:]
+                        self.encValRec[
+                            side, ind:ind + N] = self.encValWin[side, -N:]
+                        self.encPWMRec[
+                            side, ind:ind + N] = self.encPWMWin[side, -N:]
+                        self.encNNewRec[side, ind:ind + N] = [N] * N
+                        self.encPosRec[
+                            side, ind:ind + N] = [self.encPos[side]] * N
+                        self.encVelRec[
+                            side, ind:ind + N] = [self.encVel[side]] * N
+                        self.encTickStateRec[
+                            side, ind:ind + N] = self.encTickStateVec[side, -N:]
+                        self.encThresholdRec[
+                            side, ind:ind + N] = [self.encThreshold[side]] * N
+                    self.encRecInd[side] = ind + N
 
     def countEncoderTicks(self, side):
         # Set variables
-        t = self.encTimeWin[side]  # Time vector of data (non-consistent sampling time)
+        # Time vector of data (non-consistent sampling time)
+        t = self.encTimeWin[side]
         tPrev = self.encTPrev[side]  # Previous read time
         pwm = self.encPWMWin[side]  # Vector of PWM data
         pwmPrev = pwm[-1]  # Last PWM value that was applied
-        tickStatePrev = self.encTickState[side]  # Last state of tick (high (1), low (-1), or unsure (0))
+        # Last state of tick (high (1), low (-1), or unsure (0))
+        tickStatePrev = self.encTickState[side]
         tickCnt = self.encPos[side]  # Current tick count
         tickVel = self.encVel[side]  # Current tick velocity
         encValWin = self.encValWin[side]  # Encoder raw value buffer window
         threshold = self.encThreshold[side]  # Encoder value threshold
-        minPWMThreshold = self.minPWMThreshold[side]  # Minimum PWM to move wheel
+        # Minimum PWM to move wheel
+        minPWMThreshold = self.minPWMThreshold[side]
 
         N = np.sum(t > tPrev)  # Number of new updates
 
@@ -463,13 +487,14 @@ class QuickBot():
         indTuple = np.where(t == tPrev)  # Index of previous sample in window
         if len(indTuple[0] > 0):
             ind = indTuple[0][0]
-            newInds = ind + np.arange(1, N+1)  # Indices of new samples
+            newInds = ind + np.arange(1, N + 1)  # Indices of new samples
             for i in newInds:
                 if encValWin[i] > threshold:  # High tick state
                     tickState = 1
                     self.encHighCnt[side] = self.encHighCnt[side] + 1
                     self.encLowCnt[side] = 0
-                    if tickStatePrev == -1:  # Increment tick count on rising edge
+                    # Increment tick count on rising edge
+                    if tickStatePrev == -1:
                         tickCnt = tickCnt + wheelDir
 
                 else:  # Low tick state
@@ -480,17 +505,25 @@ class QuickBot():
                 tickStateVec[i] = tickState
 
             # Measure tick speed
-            diffTickStateVec = np.diff(tickStateVec)  # Tick state transition differences
-            fallingTimes = t[np.hstack((False,diffTickStateVec == -2))]  # Times when tick state goes from high to low
-            risingTimes = t[np.hstack((False,diffTickStateVec == 2))]  # Times when tick state goes from low to high
-            fallingPeriods = np.diff(fallingTimes)  # Period times between falling edges
-            risingPeriods = np.diff(risingTimes)  # Period times between rising edges
-            tickPeriods = np.hstack((fallingPeriods, risingPeriods)) # All period times
+            # Tick state transition differences
+            diffTickStateVec = np.diff(tickStateVec)
+            # Times when tick state goes from high to low
+            fallingTimes = t[np.hstack((False, diffTickStateVec == -2))]
+            # Times when tick state goes from low to high
+            risingTimes = t[np.hstack((False, diffTickStateVec == 2))]
+            # Period times between falling edges
+            fallingPeriods = np.diff(fallingTimes)
+            # Period times between rising edges
+            risingPeriods = np.diff(risingTimes)
+            tickPeriods = np.hstack(
+                (fallingPeriods, risingPeriods))  # All period times
             if len(tickPeriods) == 0:
-                if all(pwm[newInds] < minPWMThreshold):  # If all inputs are less than min set velocity to 0
+                # If all inputs are less than min set velocity to 0
+                if all(pwm[newInds] < minPWMThreshold):
                     tickVel = 0
             else:
-                tickVel = wheelDir * 1/np.mean(tickPeriods)  # Average signed tick frequency
+                # Average signed tick frequency
+                tickVel = wheelDir * 1 / np.mean(tickPeriods)
 
             # Estimate new mean values
             newEncRaw = encValWin[newInds]
@@ -509,7 +542,8 @@ class QuickBot():
                     l = self.encNonZeroCnt[side]
                     mu = self.encNonZeroMean[side]
                     sigma2 = self.encNonZeroVar[side]
-                    (muPlus, sigma2Plus, n) = recursiveMeanVar(x, l, mu, sigma2)
+                    (muPlus, sigma2Plus, n) = recursiveMeanVar(
+                        x, l, mu, sigma2)
                     self.encNonZeroMean[side] = muPlus
                     self.encNonZeroVar[side] = sigma2Plus
                     self.encNonZeroCnt[side] = n
@@ -521,7 +555,8 @@ class QuickBot():
                         l = self.encHighTotalCnt[side]
                         mu = self.encHighMean[side]
                         sigma2 = self.encHighVar[side]
-                        (muPlus, sigma2Plus, n) = recursiveMeanVar(x, l, mu, sigma2)
+                        (muPlus, sigma2Plus, n) = recursiveMeanVar(
+                            x, l, mu, sigma2)
                         self.encHighMean[side] = muPlus
                         self.encHighVar[side] = sigma2Plus
                         self.encHighTotalCnt[side] = n
@@ -533,14 +568,16 @@ class QuickBot():
                         l = self.encLowTotalCnt[side]
                         mu = self.encLowMean[side]
                         sigma2 = self.encLowVar[side]
-                        (muPlus, sigma2Plus, n) = recursiveMeanVar(x, l, mu, sigma2)
+                        (muPlus, sigma2Plus, n) = recursiveMeanVar(
+                            x, l, mu, sigma2)
                         self.encLowMean[side] = muPlus
                         self.encLowVar[side] = sigma2Plus
                         self.encLowTotalCnt[side] = n
 
             # Set threshold value
             if self.encZeroCnt[side] > self.encZeroCntMin:
-                self.encThreshold[side] = self.encZeroMean[side] - 3*np.sqrt(self.encZeroVar[side])
+                self.encThreshold[side] = self.encZeroMean[
+                    side] - 3 * np.sqrt(self.encZeroVar[side])
 
 #             elif self.encNonZeroCnt[side] > self.encNonZeroCntMin:
 #                 self.encThreshold[side] = self.encNonZeroMean[side]
@@ -561,7 +598,6 @@ class QuickBot():
 #                 else:
 #                     self.encThreshold[side] = x2
 
-
             # Update variables
             self.encPos[side] = tickCnt  # New tick count
             self.encVel[side] = tickVel  # New tick velocity
@@ -569,11 +605,12 @@ class QuickBot():
 
         self.encTPrev[side] = t[-1]  # New latest update time
 
-
     def writeBuffersToFile(self):
-        matrix = map(list, zip(*[self.encTimeRec[LEFT], self.encValRec[LEFT], self.encPWMRec[LEFT], self.encNNewRec[LEFT], \
-                                 self.encTickStateRec[LEFT], self.encPosRec[LEFT], self.encVelRec[LEFT], self.encThresholdRec[LEFT], \
-                                 self.encTimeRec[RIGHT], self.encValRec[RIGHT], self.encPWMRec[RIGHT], self.encNNewRec[RIGHT], \
+        matrix = map(list, zip(*[self.encTimeRec[LEFT], self.encValRec[LEFT], self.encPWMRec[LEFT], self.encNNewRec[LEFT],
+                                 self.encTickStateRec[LEFT], self.encPosRec[
+                                     LEFT], self.encVelRec[LEFT], self.encThresholdRec[LEFT],
+                                 self.encTimeRec[RIGHT], self.encValRec[
+                                     RIGHT], self.encPWMRec[RIGHT], self.encNNewRec[RIGHT],
                                  self.encTickStateRec[RIGHT], self.encPosRec[RIGHT], self.encVelRec[RIGHT], self.encThresholdRec[RIGHT]]))
         s = [[str(e) for e in row] for row in matrix]
         lens = [len(max(col, key=len)) for col in zip(*s)]
@@ -586,6 +623,7 @@ class QuickBot():
 
 
 class encoderRead(threading.Thread):
+
     """The encoderRead Class"""
 
     # === Class Properties ===
@@ -593,7 +631,7 @@ class encoderRead(threading.Thread):
 
     # === Class Methods ===
     # Constructor
-    def __init__(self,encPin=('P9_39', 'P9_37')):
+    def __init__(self, encPin=('P9_39', 'P9_37')):
 
         # Initialize thread
         threading.Thread.__init__(self)
@@ -631,11 +669,13 @@ def recursiveMeanVar(x, l, mu, sigma2):
     n = l + m
     muPlus = l / n * mu + m / n * np.mean(x)
     if n > 1:
-        sigma2Plus = 1/(n-1) * ((l-1)*sigma2 + (m-1)*np.var(x) + l*(mu - muPlus)**2 + m*(np.mean(x) - muPlus)**2)
+        sigma2Plus = 1 / (n - 1) * ((l - 1) * sigma2 + (m - 1) *
+                                    np.var(x) + l * (mu - muPlus) ** 2 + m * (np.mean(x) - muPlus) ** 2)
     else:
         sigma2Plus = 0
 
     return (muPlus, sigma2Plus, n)
+
 
 def operatingPoint(uStar, uStarThreshold):
     """
@@ -658,14 +698,14 @@ def operatingPoint(uStar, uStarThreshold):
     # H = [X ones(size(X))];
     # beta = H \ Y
     # beta = [0.0425, -0.9504] # Air Test Results
-    beta = [0.0606, -3.1475] # Ground Test Results
+    beta = [0.0606, -3.1475]  # Ground Test Results
 
     if np.abs(uStar) <= uStarThreshold:
         omegaStar = 0.0
     elif uStar > 0:
-        omegaStar = beta[0]*uStar + beta[1]
+        omegaStar = beta[0] * uStar + beta[1]
     else:
-        omegaStar = -1.0*(beta[0]*np.abs(uStar) + beta[1])
+        omegaStar = -1.0 * (beta[0] * np.abs(uStar) + beta[1])
 
     return omegaStar
 
@@ -688,19 +728,20 @@ def kalman(x, P, Phi, H, W, V, z):
     P: Updated estimate of error covariance matrix at time t.
 
     """
-    x_p = Phi*x  # Prediction of setimated state vector
-    P_p = Phi*P*Phi + W  # Prediction of error covariance matrix
-    S = H*P_p*H + V  # Sum of error variances
-    S_inv = 1/S  # Inverse of sum of error variances
-    K = P_p*H*S_inv  # Kalman gain
-    r = z - H*x_p  # Prediction residual
-    w = -K*r  # Process error
+    x_p = Phi * x  # Prediction of setimated state vector
+    P_p = Phi * P * Phi + W  # Prediction of error covariance matrix
+    S = H * P_p * H + V  # Sum of error variances
+    S_inv = 1 / S  # Inverse of sum of error variances
+    K = P_p * H * S_inv  # Kalman gain
+    r = z - H * x_p  # Prediction residual
+    w = -K * r  # Process error
     x = x_p - w  # Update estimated state vector
-    v = z - H*x  # Measurement error
-    if np.isnan(K*V):
+    v = z - H * x  # Measurement error
+    if np.isnan(K * V):
         P = P_p
     else:
-        P = (1 - K*H)*P_p*(1 - K*H) + K*V*K  # Updated error covariance matrix
+        # Updated error covariance matrix
+        P = (1 - K * H) * P_p * (1 - K * H) + K * V * K
 
     return (x, P)
 
@@ -710,7 +751,7 @@ def tic():
     TICTOC_START = time.time()
 
 
-def toc(tictocName = 'toc', printFlag = True):
+def toc(tictocName='toc', printFlag=True):
     global TICTOC_START
     global TICTOC_COUNT
     global TICTOC_MEAN
@@ -719,12 +760,14 @@ def toc(tictocName = 'toc', printFlag = True):
 
     tictocTime = time.time() - TICTOC_START
     TICTOC_COUNT = TICTOC_COUNT + 1
-    TICTOC_MEAN = tictocTime / TICTOC_COUNT + TICTOC_MEAN * (TICTOC_COUNT-1) / TICTOC_COUNT
-    TICTOC_MAX = max(TICTOC_MAX,tictocTime)
-    TICTOC_MIN = min(TICTOC_MIN,tictocTime)
+    TICTOC_MEAN = tictocTime / TICTOC_COUNT + \
+        TICTOC_MEAN * (TICTOC_COUNT - 1) / TICTOC_COUNT
+    TICTOC_MAX = max(TICTOC_MAX, tictocTime)
+    TICTOC_MIN = min(TICTOC_MIN, tictocTime)
 
     if printFlag:
         print tictocName + " time: " + str(tictocTime)
+
 
 def tictocPrint():
     global TICTOC_COUNT
@@ -737,5 +780,3 @@ def tictocPrint():
     print "Mean = " + str(TICTOC_MEAN)
     print "Max = " + str(TICTOC_MAX)
     print "Min = " + str(TICTOC_MIN)
-
-
