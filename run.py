@@ -46,7 +46,7 @@ if __name__ == '__main__':
         default='192.168.7.2',
         help="BBB ip (robot ip)")
     parser.add_argument(
-        '--rtype', 't',
+        '--rtype', '-t',
         default='quick',
         help="Type of robot (%s)" % '|'.join(RTYPES))
 
