@@ -95,8 +95,42 @@ class QuickBot(base.BaseBot):
 
     def __init__(self, baseIP, robotIP):
         super(QuickBot, self).__init__(baseIP, robotIP)
+        # init encoder
+        self.encoderRead = EncoderReader()
         # Initialize ADC
         ADC.setup()
+
+        if base.DEBUG:
+            # Stats of encoder values while moving -- high, low, and all tick
+            # state
+            # Min number of recorded values to start calculating stats
+            self.encHighLowCntMin = 2**5
+            self.encHighMean = [0.0, 0.0]
+            self.encHighVar = [0.0, 0.0]
+            self.encHighTotalCnt = [0, 0]
+
+            self.encLowMean = [0.0, 0.0]
+            self.encLowVar = [0.0, 0.0]
+            self.encLowTotalCnt = [0, 0]
+
+            self.encNonZeroCntMin = 2**5
+            self.encNonZeroMean = [0.0, 0.0]
+            self.encNonZeroVar = [0.0, 0.0]
+            self.encNonZeroCnt = [0, 0]
+
+            # Record variables
+            self.encRecSize = 2**13
+            self.encRecInd = [0, 0]
+            self.encTimeRec = np.zeros((2, self.encRecSize))
+            self.encValRec = np.zeros((2, self.encRecSize))
+            self.encPWMRec = np.zeros((2, self.encRecSize))
+            self.encNNewRec = np.zeros((2, self.encRecSize))
+            self.encPosRec = np.zeros((2, self.encRecSize))
+            self.encVelRec = np.zeros((2, self.encRecSize))
+            self.encTickStateRec = np.zeros((2, self.encRecSize))
+            self.encThresholdRec = np.zeros((2, self.encRecSize))
+
+
 
     def update(self):
         self.readIRValues()

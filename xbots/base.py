@@ -32,6 +32,21 @@ class BaseBot(object):
     robotSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     robotSocket.setblocking(False)
 
+    def __init__(self, baseIP, robotIP):
+        # Initialize GPIO pins
+        self._setup_gpio()
+
+        # Initialize PWM pins: PWM.start(channel, duty, freq=2000, polarity=0)
+        self._init_pwm()
+
+        # Set motor speed to 0
+        self.setPWM([0, 0])
+
+        # Set IP addresses
+        self.baseIP = baseIP
+        self.robotIP = robotIP
+        self.robotSocket.bind((self.robotIP, self.port))
+
     def _setup_gpio(self):
         """Initialize GPIO pins"""
         GPIO.setup(self.dir1Pin[LEFT], GPIO.OUT)

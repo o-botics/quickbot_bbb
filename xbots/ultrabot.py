@@ -59,6 +59,8 @@ class UltraBot(base.BaseBot):
 
     def __init__(self, baseIP, robotIP):
         super(UltraBot, self).__init__(baseIP, robotIP)
+        # init encoder
+        self.encoderRead = EncoderReader()
 
     def update(self):
         self.read_ultras()
