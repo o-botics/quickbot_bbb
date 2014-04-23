@@ -1,5 +1,5 @@
-# QuickBot_BBB
-This is the code that runs on the BeagleBone Black to control the QuickBot.
+# ultrabot_BBB
+This is the code that runs on the BeagleBone Black to control the ultrabot.
 
 ## Overview
 Essentially this code establishes socket (UDP) connection with another device (BASE) and waits for commands. The commands are either of the form of directives or queries. An example directive is setting the PWM values of the motors. An example query is getting IR sensor values.
@@ -32,20 +32,20 @@ Change into working directory:
 
 	cd ~/quickbot_bbb
 
-Launch QuickBotRun python script using IP addresses of BASE and ROBOT:
+Launch run python script using IP addresses of BASE and ROBOT:
 
-	./QuickBotRun.py 192.168.1.100 192.168.1.101
+	./run.py 192.168.1.100 192.168.1.101
 
 ## Command Set
 
-* Check that the QuickBot is up and running:
+* Check that the ultrabot is up and running:
   * Command
 
 		"$CHECK*\n"
 
   * Response
 
-		"Hello from QuickBot\n"
+		"Hello from ultrabot\n"
 
 
 * Get PWM values:
