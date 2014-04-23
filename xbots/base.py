@@ -46,6 +46,7 @@ class BaseBot(object):
         self.baseIP = baseIP
         self.robotIP = robotIP
         self.robotSocket.bind((self.robotIP, self.port))
+        print self.robotSocket
 
     def _setup_gpio(self):
         """Initialize GPIO pins"""

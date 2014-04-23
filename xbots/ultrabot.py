@@ -14,7 +14,7 @@ import time
 import base
 import math
 
-import quickbot_config as config
+import ultrabot_config as config
 import Adafruit_BBIO.GPIO as GPIO
 
 # trigger duration
@@ -61,13 +61,21 @@ class UltraBot(base.BaseBot):
         super(UltraBot, self).__init__(baseIP, robotIP)
         # init encoder
         self.encoderRead = EncoderReader()
+        # init ultras
+        self._setup_ultras()
 
     def update(self):
         self.read_ultras()
         self.read_encoders()
         self.parseCmdBuffer()
 
-    def _measure_ultra(trigger, echo):
+    def _setup_ultras(self):
+        for trigger, echo in config.ULTRAS:
+            GPIO.setup(echo, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+            GPIO.setup(trigger, GPIO.OUT)
+            GPIO.output(trigger, False)
+
+    def _measure_ultra(self, trigger, echo):
         GPIO.output(trigger, True)
         time.sleep(DECPULSETRIGGER)
         GPIO.output(trigger, False)
@@ -98,7 +106,7 @@ class UltraBot(base.BaseBot):
         # Display distance
         if intcountdown > 0:
             intdistance = (echoduration*1000000)/58
-            print "Distance = " + str(intdistance) + "cm"
+            #print "Distance = " + str(intdistance) + "cm"
             return intdistance
 
     def read_ultras(self):
