@@ -166,14 +166,14 @@ class EncoderReader(threading.Thread):
 
                 self.counter_l = 0
                 current_time_l = time.time()
-                print "velocity_l %s cm/s" % velocity_l
+                #print "velocity_l %s cm/s" % velocity_l
             if (time.time() >= current_time_r + TIME_INTERVAL):
                 global ENC_VEL
                 velocity_r = (
                     self.counter_r * (WHEEL_RADIUS * CONST)
                 ) / TIME_INTERVAL
-                ENC_VEL[base.RIGHT] = velocity_l
+                ENC_VEL[base.RIGHT] = velocity_r
 
                 self.counter_r = 0
                 current_time_r = time.time()
-                print "velocity_r %s cm/s" % velocity_r
+                #print "velocity_r %s cm/s" % velocity_r
