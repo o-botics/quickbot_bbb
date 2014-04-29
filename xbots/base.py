@@ -22,6 +22,7 @@ DEBUG = False
 class BaseBot(object):
     # Parameters
     sampleTime = 20.0 / 1000.0
+    pwm_freq = 2000
 
     # Variables
     ledFlag = True
@@ -37,7 +38,7 @@ class BaseBot(object):
         self._setup_gpio()
 
         # Initialize PWM pins: PWM.start(channel, duty, freq=2000, polarity=0)
-        self._init_pwm()
+        self._init_pwm(self.pwm_freq)
 
         # Set motor speed to 0
         self.setPWM([0, 0])
@@ -46,7 +47,6 @@ class BaseBot(object):
         self.baseIP = baseIP
         self.robotIP = robotIP
         self.robotSocket.bind((self.robotIP, self.port))
-        print self.robotIP
 
     def _setup_gpio(self):
         """Initialize GPIO pins"""
@@ -56,12 +56,16 @@ class BaseBot(object):
         GPIO.setup(self.dir2Pin[RIGHT], GPIO.OUT)
         GPIO.setup(self.led, GPIO.OUT)
 
-    def _init_pwm(self):
+    def _init_pwm(self, frequency=2000):
         """ Initialize PWM pins:
             PWM.start(channel, duty, freq=2000, polarity=0)
         """
-        PWM.start(self.pwmPin[LEFT], 0)
-        PWM.start(self.pwmPin[RIGHT], 0)
+        # XXX
+        # It is currently not possible to set frequency for two PWM
+        # a maybe solution patch pwm_test.c 
+        # https://github.com/SaadAhmad/beaglebone-black-cpp-PWM
+        PWM.start(self.pwmPin[LEFT], 0)#, frequency=frequency)
+        PWM.start(self.pwmPin[RIGHT], 0)#, frequency=frequency)
 
     def setPWM(self, pwm):
         # [leftSpeed, rightSpeed]: 0 is off, caps at min and max values

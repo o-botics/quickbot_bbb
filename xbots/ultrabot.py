@@ -40,6 +40,7 @@ class UltraBot(base.BaseBot):
     dir1Pin = (config.INl1, config.INr1)
     dir2Pin = (config.INl2, config.INr2)
     pwmPin = (config.PWMl, config.PWMr)
+    pwm_freq = 100
 
     # LED pin
     led = config.LED
