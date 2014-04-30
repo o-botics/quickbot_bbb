@@ -52,6 +52,9 @@ class UltraBot(base.BaseBot):
     pwm = [0, 0]
 
     # State Ultras
+    ultraVal = [0.0, 0.0, 0.0, 0.0, 0.0]
+
+    # State ir
     irVal = [0.0, 0.0, 0.0, 0.0, 0.0]
 
     # State Encoder
@@ -112,12 +115,12 @@ class UltraBot(base.BaseBot):
 
     def read_ultras(self):
         for idx, (trigger, echo) in enumerate(config.ULTRAS):
-            prevVal = self.irVal[idx]
+            prevVal = self.ultraVal[idx]
             distance = self._measure_ultra(trigger, echo)
-            self.irVal[idx] = distance
+            self.ultraVal[idx] = distance
 
-            if self.irVal[idx] >= MAX_CENTIMETER or distance is None:
-                self.irVal[idx] = prevVal
+            if self.ultraVal[idx] >= MAX_CENTIMETER or distance is None:
+                self.ultraVal[idx] = prevVal
 
     def read_encoders(self):
         self.encPos = ENC_POS  # New tick count

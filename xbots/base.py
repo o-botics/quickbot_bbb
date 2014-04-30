@@ -152,6 +152,13 @@ class BaseBot(object):
                     self.robotSocket.sendto(
                         reply + '\n', (self.baseIP, self.port))
 
+            elif msgResult.group('CMD') == 'ULTRAVAL':
+                if msgResult.group('QUERY'):
+                    reply = '[' + ', '.join(map(str, self.ultraVal)) + ']'
+                    print 'Sending: ' + reply
+                    self.robotSocket.sendto(
+                        reply + '\n', (self.baseIP, self.port))
+
             elif msgResult.group('CMD') == 'ENVAL':
                 if msgResult.group('QUERY'):
                     reply = '[' + ', '.join(map(str, self.encPos)) + ']'
