@@ -8,7 +8,7 @@ Essentially this code establishes socket (UDP) connection with another device (B
 Clone the repo into home directory:
 
 	cd ~
-	git clone https://bitbucket.org/rowoflo/quickbot_bbb.git
+	git clone https://github.com/o-botics/quickbot_bbb.git
 
 ## Running
 Check IP address of BASE and ROBOT (run command on both systems and look for IP address):
