@@ -2,7 +2,10 @@
 This is the code that runs on the BeagleBone Black to control the ultrabot.
 
 ## Overview
-Essentially this code establishes socket (UDP) connection with another device (BASE) and waits for commands. The commands are either of the form of directives or queries. An example directive is setting the PWM values of the motors. An example query is getting IR sensor values.
+Essentially this code establishes socket (UDP) connection with another device
+(BASE) and waits for commands. The commands are either of the form of
+directives or queries. An example directive is setting the PWM values of the
+motors. An example query is getting IR sensor values.
 
 ## Installation
 Clone the repo into home directory:
@@ -11,7 +14,8 @@ Clone the repo into home directory:
 	git clone https://github.com/o-botics/quickbot_bbb.git
 
 ## Running
-Check IP address of BASE and ROBOT (run command on both systems and look for IP address):
+Check IP address of BASE and ROBOT (run command on both systems and look for IP
+address):
 
 	ifconfig
 
@@ -26,15 +30,28 @@ Example output from BBB:
 	          collisions:0 txqueuelen:1000
 	          RX bytes:66840454 (63.7 MiB)  TX bytes:1878384 (1.7 MiB)
 
-Here the IP address for the robot is 192.168.1.101. Let's assume the IP address for the BASE is 192.168.1.100.
+Here the IP address for the robot is 192.168.1.101. Let's assume the IP address
+for the BASE is 192.168.1.100.
 
 Change into working directory:
 
-	cd ~/quickbot_bbb
+	$ cd ~/quickbot_bbb
 
-Launch run python script using IP addresses of BASE and ROBOT:
+Quick run with given ips:
 
-	./run.py 192.168.1.100 192.168.1.101
+    $ python run.py -i 192.168.1.100 -r 192.168.1.101
+
+All commands:
+
+    $ python run.py --help
+    usage: run.py [-h] [--ip IP] [--rip RIP] [--rtype RTYPE]
+
+    optional arguments:
+      -h, --help            show this help message and exit
+      --ip IP, -i IP        Computer ip (base ip)
+      --rip RIP, -r RIP     BBB ip (robot ip)
+      --rtype RTYPE, -t RTYPE
+                            Type of robot (quick|ultra)
 
 ## Command Set
 
@@ -45,7 +62,7 @@ Launch run python script using IP addresses of BASE and ROBOT:
 
   * Response
 
-		"Hello from ultrabot\n"
+		"Hello from [Quick|Ultra]Bot\n"
 
 
 * Get PWM values:
@@ -73,6 +90,14 @@ Launch run python script using IP addresses of BASE and ROBOT:
 
 		"[800, 810, 820, 830, 840]\n"
 
+* Get Ultra values:
+  * Command
+
+		"$ULTRAVAL?*\n"
+
+  * Example response
+
+		"[80.0, 251.0, 234.1, 12.1, 21.3]\n"
 
 * Get encoder position:
   * Command

@@ -55,7 +55,7 @@ class UltraBot(base.BaseBot):
     ultraVal = [0.0, 0.0, 0.0, 0.0, 0.0]
 
     # State ir
-    irVal = [0.0, 0.0, 0.0, 0.0, 0.0]
+    irVal = [0, 0, 0, 0, 0]
 
     # State Encoder
     encPos = [0.0, 0.0]  # Last encoder tick position
