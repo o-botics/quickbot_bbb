@@ -35,7 +35,7 @@ ENC_POS = [0.0, 0.0]
 
 
 class UltraBot(base.BaseBot):
-    """The QuickBot Class"""
+    """The UltraBot Class"""
     # Motor Pins -- (LEFT, RIGHT)
     dir1Pin = (config.INl1, config.INr1)
     dir2Pin = (config.INl2, config.INr2)

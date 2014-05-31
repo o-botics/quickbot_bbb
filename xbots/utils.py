@@ -9,6 +9,26 @@ TICTOC_MAX = -float('inf')
 TICTOC_MIN = float('inf')
 
 
+def convertHEXtoDEC(hexString, N):
+    """
+    Return 2's compliment of hexString
+    """
+    for hexChar in hexString:
+        asciiNum = ord(hexChar)
+        if not ((asciiNum >= 48 and asciiNum <= 57) or
+                (asciiNum >= 65 and asciiNum <= 70) or
+                (asciiNum >= 97 and asciiNum <= 102)):
+            val = float('nan')
+            return val
+
+    if len(hexString) == N:
+        val = int(hexString, 16)
+        bits = 4*len(hexString)
+        if (val & (1 << (bits-1))) != 0:
+            val = val - (1 << bits)
+        return val
+
+
 def operatingPoint(uStar, uStarThreshold):
     """
     This function returns the steady state tick velocity given some PWM input.

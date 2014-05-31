@@ -16,7 +16,7 @@ import base
 import utils
 
 import numpy as np
-import quickbot_config as config
+import quickbot_v1_config as config
 import Adafruit_BBIO.ADC as ADC
 
 # Constants

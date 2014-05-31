@@ -48,6 +48,10 @@ class BaseBot(object):
         self.robotIP = robotIP
         self.robotSocket.bind((self.robotIP, self.port))
 
+        # Initialize command parsing thread
+        self.cmdParsingThread = threading.Thread(target = parseCmd, args = (self, ))
+        self.cmdParsingThread.daemon = True
+
     def _setup_gpio(self):
         """Initialize GPIO pins"""
         GPIO.setup(self.dir1Pin[LEFT], GPIO.OUT)
@@ -62,7 +66,7 @@ class BaseBot(object):
         """
         # XXX
         # It is currently not possible to set frequency for two PWM
-        # a maybe solution patch pwm_test.c 
+        # a maybe solution patch pwm_test.c
         # https://github.com/SaadAhmad/beaglebone-black-cpp-PWM
         PWM.start(self.pwmPin[LEFT], 0)#, frequency=frequency)
         PWM.start(self.pwmPin[RIGHT], 0)#, frequency=frequency)
@@ -103,8 +107,66 @@ class BaseBot(object):
             GPIO.output(self.dir2Pin[RIGHT], GPIO.LOW)
             PWM.set_duty_cycle(self.pwmPin[RIGHT], 0)
 
-    def parseCmdBuffer(self):
+    def run(self):
         global RUN_FLAG
+
+        # Start threads
+        self.cmdParsingThread.start()
+        self.startThreads()
+
+        # Run loop
+        while RUN_FLAG is True:
+            self.update()
+
+            # Flash BBB LED
+            if self.ledFlag is True:
+                self.ledFlag = False
+                GPIO.output(self.led, GPIO.HIGH)
+            else:
+                self.ledFlag = True
+                GPIO.output(self.led, GPIO.LOW)
+
+            time.sleep(self.sampleTime)
+        self.cleanup()
+        return
+
+    def cleanup(self):
+        sys.stdout.write("Shutting down...")
+        self.setPWM([0, 0])
+        self.robotSocket.close()
+        GPIO.cleanup()
+        PWM.cleanup()
+        if DEBUG:
+            # tictocPrint()
+            # self.writeBuffersToFile()
+        sys.stdout.write("Done\n")
+
+    def writeBuffersToFile(self):
+        matrix = map(list, zip(*[self.encTimeRec[LEFT], self.encValRec[LEFT],
+                                 self.encPWMRec[LEFT], self.encNNewRec[LEFT],
+                                 self.encTickStateRec[LEFT],
+                                 self.encPosRec[LEFT],
+                                 self.encVelRec[LEFT],
+                                 self.encThresholdRec[LEFT],
+                                 self.encTimeRec[RIGHT],
+                                 self.encValRec[RIGHT],
+                                 self.encPWMRec[RIGHT], self.encNNewRec[RIGHT],
+                                 self.encTickStateRec[RIGHT],
+                                 self.encPosRec[RIGHT], self.encVelRec[RIGHT],
+                                 self.encThresholdRec[RIGHT]]))
+        s = [[str(e) for e in row] for row in matrix]
+        lens = [len(max(col, key=len)) for col in zip(*s)]
+        fmt = '\t'.join('{{:{}}}'.format(x) for x in lens)
+        table = [fmt.format(*row) for row in s]
+        f = open('output.txt', 'w')
+        f.write('\n'.join(table))
+        f.close()
+        print "Wrote buffer to output.txt"
+
+def parseCmd(self):
+    global RUN_FLAG
+
+    while RUN_FLAG:
         try:
             line = self.robotSocket.recv(1024)
         except socket.error as msg:
@@ -116,13 +178,13 @@ class BaseBot(object):
         bufferPattern = r'\$[^\$\*]*?\*'
         bufferRegex = re.compile(bufferPattern)
         bufferResult = bufferRegex.search(self.cmdBuffer)
-        msgPattern = r'\$(?P<CMD>[A-Z]{3,})(?P<SET>=?)(?P<QUERY>\??)(?(2)(?P<ARGS>.*)).*\*'
 
         if bufferResult:
             msg = bufferResult.group()
-            print msg
+            # print msg
             self.cmdBuffer = ''
 
+            msgPattern = r'\$(?P<CMD>[A-Z]{3,})(?P<SET>=?)(?P<QUERY>\??)(?(2)(?P<ARGS>.*)).*\*'
             msgRegex = re.compile(msgPattern)
             msgResult = msgRegex.search(msg)
 
@@ -159,7 +221,15 @@ class BaseBot(object):
                     self.robotSocket.sendto(
                         reply + '\n', (self.baseIP, self.port))
 
-            elif msgResult.group('CMD') == 'ENVAL':
+            elif msgResult.group('CMD') == 'POS':
+                if msgResult.group('QUERY'):
+                    reply = '[' + ', '.join(map(str, self.getPos())) + ']'
+                    print 'Sending: ' + reply
+                    self.robotSocket.sendto(
+                        reply + '\n', (self.baseIP, self.port))
+
+            elif msgResult.group('CMD') == 'ENPOS' or \
+                    msgResult.group('CMD') == 'ENVAL':
                 if msgResult.group('QUERY'):
                     reply = '[' + ', '.join(map(str, self.encPos)) + ']'
                     print 'Sending: ' + reply
@@ -200,60 +270,3 @@ class BaseBot(object):
                 RUN_FLAG_LOCK.acquire()
                 RUN_FLAG = False
                 RUN_FLAG_LOCK.release()
-
-    def run(self):
-        global RUN_FLAG
-        self.encoderRead.start()
-        try:
-            while RUN_FLAG is True:
-                self.update()
-
-                # Flash BBB LED
-                if self.ledFlag is True:
-                    self.ledFlag = False
-                    GPIO.output(self.led, GPIO.HIGH)
-                else:
-                    self.ledFlag = True
-                    GPIO.output(self.led, GPIO.LOW)
-                time.sleep(self.sampleTime)
-        except:
-            RUN_FLAG_LOCK.acquire()
-            RUN_FLAG = False
-            RUN_FLAG_LOCK.release()
-            raise
-
-        self.cleanup()
-        return
-
-    def cleanup(self):
-        sys.stdout.write("Shutting down...")
-        self.setPWM([0, 0])
-        self.robotSocket.close()
-        GPIO.cleanup()
-        PWM.cleanup()
-        if DEBUG:
-            # tictocPrint()
-            self.writeBuffersToFile()
-        sys.stdout.write("Done\n")
-
-    def writeBuffersToFile(self):
-        matrix = map(list, zip(*[self.encTimeRec[LEFT], self.encValRec[LEFT],
-                                 self.encPWMRec[LEFT], self.encNNewRec[LEFT],
-                                 self.encTickStateRec[LEFT],
-                                 self.encPosRec[LEFT],
-                                 self.encVelRec[LEFT],
-                                 self.encThresholdRec[LEFT],
-                                 self.encTimeRec[RIGHT],
-                                 self.encValRec[RIGHT],
-                                 self.encPWMRec[RIGHT], self.encNNewRec[RIGHT],
-                                 self.encTickStateRec[RIGHT],
-                                 self.encPosRec[RIGHT], self.encVelRec[RIGHT],
-                                 self.encThresholdRec[RIGHT]]))
-        s = [[str(e) for e in row] for row in matrix]
-        lens = [len(max(col, key=len)) for col in zip(*s)]
-        fmt = '\t'.join('{{:{}}}'.format(x) for x in lens)
-        table = [fmt.format(*row) for row in s]
-        f = open('output.txt', 'w')
-        f.write('\n'.join(table))
-        f.close()
-        print "Wrote buffer to output.txt"
