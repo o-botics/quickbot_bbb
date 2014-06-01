@@ -4,8 +4,7 @@
 @author Josip Delic (delijati.net)
 @date 04/23/2014
 @version: 0.1
-@copyright: Copyright (C) 2014, Georgia Tech Research Corporation
-see the LICENSE file included with this software (see LINENSE file)
+@copyright: Copyright (C) 2014, see the LICENSE file
 """
 
 from __future__ import division

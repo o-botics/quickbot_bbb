@@ -1,5 +1,5 @@
 """
-@brief QuickBot class for Beaglebone Black
+@brief QuickBot class
 
 @author Rowland O'Flaherty (rowlandoflaherty.com)
 @date 05/30/2014
@@ -31,48 +31,42 @@ class QuickBot(base.BaseBot):
     """The QuickBot Class"""
 
     # Parameters
-    sampleTime = 20.0 / 1000.0
+    sample_time = 20.0 / 1000.0
 
     # Motor Pins -- (LEFT, RIGHT)
-    dir1Pin = (config.motorL.dir1, config.motorR.dir1)
-    dir2Pin = (config.motorL.dir2, config.motorR.dir2)
-    pwmPin = (config.motorL.pwm, config.motorR.pwm)
+    dir1Pin = (config.MOTOR_L.dir1, config.MOTOR_R.dir1)
+    dir2Pin = (config.MOTOR_L.dir2, config.MOTOR_R.dir2)
+    pwmPin = (config.MOTOR_L.pwm, config.MOTOR_R.pwm)
 
     # LED pin
-    led = config.ledPin
+    led = config.LED
 
     # Encoder Serial
     encoderSerial = (
         serial.Serial(
-            port=config.enL.port,
-            baudrate=config.enL.baudrate,
+            port=config.EN_L.port,
+            baudrate=config.EN_L.baudrate,
             timeout=.1),
         serial.Serial(
-            port=config.enR.port,
-            baudrate=config.enR.baudrate,
+            port=config.EN_R.port,
+            baudrate=config.EN_R.baudrate,
             timeout=.1))
     encoderBuffer = ['', '']
-
-    # Constraints
-    pwmLimits = [-100, 100]  # [min, max]
 
     # Wheel parameter
     ticksPerTurn = 128  # Number of ticks on encoder disc
     wheelRadius = (58.7 / 2.0) / 1000.0  # Radius of wheel in meters
-
-    # State PWM -- (LEFT, RIGHT)
-    pwm = [0, 0]
 
     # State Encoder
     encTime = [0.0, 0.0]  # Last time encoders were read
     encRaw = [0.0, 0.0]  # Last encoder tick position
     encVel = [0.0, 0.0]  # Last encoder tick velocity
 
-    def __init__(self, baseIP, robotIP):
-        super(QuickBot, self).__init__(baseIP, robotIP)
+    def __init__(self, base_ip, robot_ip):
+        super(QuickBot, self).__init__(base_ip, robot_ip)
 
         # State IR
-        self.nIR = len(config.irPins)
+        self.nIR = len(config.IR)
         self.irVal = self.nIR*[0.0]
 
         # State Encoder
@@ -85,12 +79,10 @@ class QuickBot(base.BaseBot):
         ADC.setup()
 
         # Initialize IR thread
-        self.irThreadRunning = False
         self.irThread = threading.Thread(target=readIR, args=(self, ))
         self.irThread.daemon = True
 
         # Initialize encoder threads
-        self.enThreadRunning = 2*[False]
         self.encDirThread = 2*[None]
         self.encPosThread = 2*[None]
         self.encVelThread = 2*[None]
@@ -99,7 +91,7 @@ class QuickBot(base.BaseBot):
                 target=readEncPos, args=(self, side))
             self.encPosThread[side].daemon = True
 
-    def startThreads(self):
+    def start_threads(self):
         self.irThread.start()
         for side in range(0, 2):
             self.encPosThread[side].start()
@@ -107,20 +99,17 @@ class QuickBot(base.BaseBot):
         # Calibrate encoders
         self.calibrateEncPos()
 
-    def waitForThreads(self):
-        while self.irThreadRunning or \
-                self.enThreadRunning[LEFT] or \
-                self.enThreadRunning[RIGHT]:
-            time.sleep(self.sampleTime)
+        # Call parent method
+        super(QuickBot, self).start_threads()
+
 
     def getIr(self):
         return self.irVal
 
     def calibrateEncPos(self):
-        print("DEBUG: cal encoder")
-        self.setPWM([100, 100])
+        self.set_pwm([100, 100])
         time.sleep(0.1)
-        self.setPWM([0, 0])
+        self.set_pwm([0, 0])
         time.sleep(1.0)
         self.resetEncPos()
 
@@ -140,7 +129,7 @@ class QuickBot(base.BaseBot):
         return pos
 
     def getEncOffset(self):
-        return self.encOffset()
+        return self.encOffset
 
     def resetEncPos(self):
         self.encOffset[LEFT] = self.encRaw[LEFT]
@@ -149,32 +138,20 @@ class QuickBot(base.BaseBot):
     def getEncVel(self):
         return self.encVel
 
-    def update(self):
-        pass
-
 
 def readIR(self):
-    self.irThreadRunning = True
-
     while self.run_flag:
         for i in range(0, self.nIR):
             ADC_LOCK.acquire()
-            self.irVal[i] = ADC.read_raw(config.irPins[i])
+            self.irVal[i] = ADC.read_raw(config.IR[i])
             time.sleep(ADCTIME)
             ADC_LOCK.release()
 
-    self.irThreadRunning = False
-
 
 def readEncPos(self, side):
-    sampleTime = (20.0 / 1000.0)
-    self.enThreadRunning[side] = True
-
     while self.run_flag:
         parseEncoderBuffer(self, side)
-        time.sleep(sampleTime)
-
-    self.enThreadRunning[side] = False
+        time.sleep(self.sample_time)
 
 
 def parseEncoderBuffer(self, side):
@@ -182,7 +159,7 @@ def parseEncoderBuffer(self, side):
 
     bytesInWaiting = self.encoderSerial[side].inWaiting()
 
-    if (bytesInWaiting > 0):
+    if bytesInWaiting > 0:
         self.encoderBuffer[side] += \
             self.encoderSerial[side].read(bytesInWaiting)
 
