@@ -228,16 +228,16 @@ def parse_cmd(self):
                 print msg
                 self.cmdBuffer = ''
 
-                msgCmdPattern = '(?P<CMD>[A-Z]{3,})'
-                msgSetPattern = '(?P<SET>=?)'
-                msgQueryPattern = '(?P<QUERY>\??)'
-                msgArgPattern = '(?(2)(?P<ARGS>.*))'
+                cmdPattern = r'(?P<CMD>[A-Z]{3,})'
+                setPattern = r'(?P<SET>=?)'
+                queryPattern = r'(?P<QUERY>\??)'
+                argPattern = r'(?(2)(?P<ARGS>.*))'
                 msgPattern = r'\$' + \
-                    msgCmdPattern + \
-                    msgSetPattern + \
-                    msgQueryPattern + \
-                    msgArgPattern + \
-                    '.*\*'
+                    cmdPattern + \
+                    setPattern + \
+                    queryPattern + \
+                    argPattern + \
+                    r'.*\*'
 
                 msgRegex = re.compile(msgPattern)
                 msgResult = msgRegex.search(msg)
@@ -282,6 +282,16 @@ def parse_cmd(self):
                         self.robotSocket.sendto(
                             reply + '\n', (self.base_ip, self.port))
 
+                    elif msgResult.group('SET') and msgResult.group('ARGS'):
+                        args = msgResult.group('ARGS')
+                        argPattern = r'(?P<LEFT>[-]?\d+[\.]?\d*),(?P<RIGHT>[-]?\d+[\.]?\d*)'
+                        regex = re.compile(argPattern)
+                        result = regex.match(args)
+                        if result:
+                            pos = [float(regex.match(args).group('LEFT')),
+                                     float(regex.match(args).group('RIGHT'))]
+                            self.setPos(pos)
+
                 elif msgResult.group('CMD') == 'ENPOS' or \
                         msgResult.group('CMD') == 'ENVAL':
                     if msgResult.group('QUERY'):
@@ -289,6 +299,16 @@ def parse_cmd(self):
                         print 'Sending: ' + reply
                         self.robotSocket.sendto(
                             reply + '\n', (self.base_ip, self.port))
+
+                    elif msgResult.group('SET') and msgResult.group('ARGS'):
+                        args = msgResult.group('ARGS')
+                        argPattern = r'(?P<LEFT>[-]?\d+[\.]?\d*),(?P<RIGHT>[-]?\d+[\.]?\d*)'
+                        regex = re.compile(argPattern)
+                        result = regex.match(args)
+                        if result:
+                            encPos = [float(regex.match(args).group('LEFT')),
+                                     float(regex.match(args).group('RIGHT'))]
+                            self.setEncPos(encPos)
 
                 elif msgResult.group('CMD') == 'ENRAW':
                     if msgResult.group('QUERY'):
@@ -304,6 +324,16 @@ def parse_cmd(self):
                         print 'Sending: ' + reply
                         self.robotSocket.sendto(
                             reply + '\n', (self.base_ip, self.port))
+
+                    elif msgResult.group('SET') and msgResult.group('ARGS'):
+                        args = msgResult.group('ARGS')
+                        argPattern = r'(?P<LEFT>[-]?\d+[\.]?\d*),(?P<RIGHT>[-]?\d+[\.]?\d*)'
+                        regex = re.compile(argPattern)
+                        result = regex.match(args)
+                        if result:
+                            offset = [float(regex.match(args).group('LEFT')),
+                                     float(regex.match(args).group('RIGHT'))]
+                            self.setEncOffset(offset)
 
                 elif msgResult.group('CMD') == 'ENVEL':
                     if msgResult.group('QUERY'):

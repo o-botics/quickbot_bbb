@@ -73,7 +73,7 @@ class QuickBot(base.BaseBot):
         self.encDir = [1, -1]      # Last encoder direction
         self.encRaw = [0, 0]      # Last encoder tick position
         self.encVel = [0.0, 0.0]  # Last encoder tick velocity
-        self.encOffset = [0, 0]  # Offset from raw encoder tick
+        self.encOffset = [0.0, 0.0]  # Offset from raw encoder tick
 
         # Initialize ADC
         ADC.setup()
@@ -120,6 +120,12 @@ class QuickBot(base.BaseBot):
         return [self.encRaw[LEFT] - self.encOffset[LEFT],
                 -1*(self.encRaw[RIGHT] - self.encOffset[RIGHT])]
 
+    def setEncPos(self, encPos):
+        offset = [0.0, 0.0]
+        for side in range(0, 2):
+            offset[side] = self.encRaw[side] - encPos[side]
+        self.setEncOffset(offset)
+
     def getPos(self):
         pos = [0.0, 0.0]
         encPos = self.getEncPos()
@@ -128,8 +134,19 @@ class QuickBot(base.BaseBot):
                 2 * np.pi * self.wheelRadius
         return pos
 
+    def setPos(self, pos):
+        encPos = [0.0, 0.0]
+        for side in range(0, 2):
+            encPos[side] = pos[side] * self.ticksPerTurn / \
+                (2 * np.pi * self.wheelRadius)
+        self.setEncPos(encPos)
+
     def getEncOffset(self):
         return self.encOffset
+
+    def setEncOffset(self, offset):
+        for side in range(0, 2):
+            self.encOffset[side] = offset[side]
 
     def resetEncPos(self):
         self.encOffset[LEFT] = self.encRaw[LEFT]
