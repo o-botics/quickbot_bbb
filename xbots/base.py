@@ -138,6 +138,10 @@ class BaseBot(object):
             GPIO.output(self.dir2Pin[RIGHT], GPIO.LOW)
             PWM.set_duty_cycle(self.pwmPin[RIGHT], 0)
 
+    def get_pwm(self):
+        """ Get motor PWM values """
+        return self.pwm
+
     def start_threads(self):
         """ Start all threads """
         self.cmd_parsing_thread.start()
@@ -184,27 +188,27 @@ class BaseBot(object):
             # self.writeBuffersToFile()
         sys.stdout.write("Done\n")
 
-    def writeBuffersToFile(self):
-        matrix = map(list, zip(*[self.encTimeRec[LEFT], self.encValRec[LEFT],
-                                 self.encPWMRec[LEFT], self.encNNewRec[LEFT],
-                                 self.encTickStateRec[LEFT],
-                                 self.encPosRec[LEFT],
-                                 self.encVelRec[LEFT],
-                                 self.encThresholdRec[LEFT],
-                                 self.encTimeRec[RIGHT],
-                                 self.encValRec[RIGHT],
-                                 self.encPWMRec[RIGHT], self.encNNewRec[RIGHT],
-                                 self.encTickStateRec[RIGHT],
-                                 self.encPosRec[RIGHT], self.encVelRec[RIGHT],
-                                 self.encThresholdRec[RIGHT]]))
-        s = [[str(e) for e in row] for row in matrix]
-        lens = [len(max(col, key=len)) for col in zip(*s)]
-        fmt = '\t'.join('{{:{}}}'.format(x) for x in lens)
-        table = [fmt.format(*row) for row in s]
-        f = open('output.txt', 'w')
-        f.write('\n'.join(table))
-        f.close()
-        print "Wrote buffer to output.txt"
+    # def writeBuffersToFile(self):
+    #     matrix = map(list, zip(*[self.encTimeRec[LEFT], self.encValRec[LEFT],
+                             # self.encPWMRec[LEFT], self.encNNewRec[LEFT],
+                             # self.encTickStateRec[LEFT],
+                             # self.encPosRec[LEFT],
+                             # self.encVelRec[LEFT],
+                             # self.encThresholdRec[LEFT],
+                             # self.encTimeRec[RIGHT],
+                             # self.encValRec[RIGHT],
+                             # self.encPWMRec[RIGHT], self.encNNewRec[RIGHT],
+                             # self.encTickStateRec[RIGHT],
+                             # self.encPosRec[RIGHT], self.encVelRec[RIGHT],
+                             # self.encThresholdRec[RIGHT]]))
+    #     s = [[str(e) for e in row] for row in matrix]
+    #     lens = [len(max(col, key=len)) for col in zip(*s)]
+    #     fmt = '\t'.join('{{:{}}}'.format(x) for x in lens)
+    #     table = [fmt.format(*row) for row in s]
+    #     f = open('output.txt', 'w')
+    #     f.write('\n'.join(table))
+    #     f.close()
+    #     print "Wrote buffer to output.txt"
 
 
 def parse_cmd(self):
@@ -248,8 +252,9 @@ def parse_cmd(self):
 
                 elif msgResult.group('CMD') == 'PWM':
                     if msgResult.group('QUERY'):
+                        print(str(self.get_pwm()))
                         self.robotSocket.sendto(
-                            str(self.pwm) + '\n', (self.base_ip, self.port))
+                            str(self.get_pwm()) + '\n', (self.base_ip, self.port))
 
                     elif msgResult.group('SET') and msgResult.group('ARGS'):
                         args = msgResult.group('ARGS')
@@ -260,6 +265,7 @@ def parse_cmd(self):
                             pwm = [int(pwmRegex.match(args).group('LEFT')),
                                      int(pwmRegex.match(args).group('RIGHT'))]
                             self.set_pwm(pwm)
+                            self.robotSocket.sendto(str(self.get_pwm()) + '\n', (self.base_ip, self.port))
 
                 elif msgResult.group('CMD') == 'IRVAL':
                     if msgResult.group('QUERY'):
@@ -277,8 +283,7 @@ def parse_cmd(self):
 
                 elif msgResult.group('CMD') == 'POS':
                     if msgResult.group('QUERY'):
-                        reply = '[' + ', '.join(map(str, self.getPos())) + ']'
-                        print 'Sending: ' + reply
+                        print 'Sending: ' + str(self.getPos())
                         self.robotSocket.sendto(
                             reply + '\n', (self.base_ip, self.port))
 
