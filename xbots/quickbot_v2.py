@@ -58,148 +58,160 @@ class QuickBot(base.BaseBot):
     wheelRadius = (58.7 / 2.0) / 1000.0  # Radius of wheel in meters
 
     # State Encoder
-    encTime = [0.0, 0.0]  # Last time encoders were read
-    encRaw = [0.0, 0.0]  # Last encoder tick position
-    encVel = [0.0, 0.0]  # Last encoder tick velocity
+    enc_raw = [0.0, 0.0]  # Last encoder tick position
+    enc_vel = [0.0, 0.0]  # Last encoder tick velocity
 
     def __init__(self, base_ip, robot_ip):
         super(QuickBot, self).__init__(base_ip, robot_ip)
 
         # State IR
-        self.nIR = len(config.IR)
-        self.irVal = self.nIR*[0.0]
+        self.n_ir = len(config.IR)
+        self.ir_val = self.n_ir*[0.0]
 
         # State Encoder
-        self.encDir = [1, -1]      # Last encoder direction
-        self.encRaw = [0, 0]      # Last encoder tick position
-        self.encVel = [0.0, 0.0]  # Last encoder tick velocity
-        self.encOffset = [0.0, 0.0]  # Offset from raw encoder tick
+        self.enc_dir = [1, -1]      # Last encoder direction
+        self.enc_raw = [0, 0]      # Last encoder tick position
+        self.enc_vel = [0.0, 0.0]  # Last encoder tick velocity
+        self.enc_offset = [0.0, 0.0]  # Offset from raw encoder tick
 
         # Initialize ADC
         ADC.setup()
 
         # Initialize IR thread
-        self.irThread = threading.Thread(target=readIR, args=(self, ))
-        self.irThread.daemon = True
+        self.ir_thread = threading.Thread(target=read_ir, args=(self, ))
+        self.ir_thread.daemon = True
 
         # Initialize encoder threads
-        self.encDirThread = 2*[None]
-        self.encPosThread = 2*[None]
-        self.encVelThread = 2*[None]
+        self.enc_dir_thread = 2*[None]
+        self.enc_pos_thread = 2*[None]
+        self.enc_vel_thread = 2*[None]
         for side in range(0, 2):
-            self.encPosThread[side] = threading.Thread(
-                target=readEncPos, args=(self, side))
-            self.encPosThread[side].daemon = True
+            self.enc_pos_thread[side] = threading.Thread(
+                target=read_enc_val, args=(self, side))
+            self.enc_pos_thread[side].daemon = True
 
     def start_threads(self):
-        self.irThread.start()
+        """ Start all threads """
+        self.ir_thread.start()
         for side in range(0, 2):
-            self.encPosThread[side].start()
+            self.enc_pos_thread[side].start()
 
         # Calibrate encoders
-        self.calibrateEncPos()
+        self.calibrate_enc_val()
 
         # Call parent method
         super(QuickBot, self).start_threads()
 
 
-    def getIr(self):
-        return self.irVal
+    def get_ir(self):
+        """ Getter for IR sensor values """
+        return self.ir_val
 
-    def calibrateEncPos(self):
+    def calibrate_enc_val(self):
+        """ Calibrate wheel encoder values"""
         self.set_pwm([100, 100])
         time.sleep(0.1)
         self.set_pwm([0, 0])
         time.sleep(1.0)
-        self.resetEncPos()
+        self.reset_enc_val()
 
-    def getEncRaw(self):
-        return self.encRaw
+    def get_enc_raw(self):
+        """ Getter for raw encoder values """
+        return self.enc_raw
 
-    def getEncPos(self):
-        return [self.encRaw[LEFT] - self.encOffset[LEFT],
-                -1*(self.encRaw[RIGHT] - self.encOffset[RIGHT])]
+    def get_enc_val(self):
+        """ Getter for encoder tick values i.e (raw - offset) """
+        return [self.enc_raw[LEFT] - self.enc_offset[LEFT],
+                -1*(self.enc_raw[RIGHT] - self.enc_offset[RIGHT])]
 
-    def setEncPos(self, encPos):
+    def set_enc_val(self, enc_val):
+        """ Setter for encoder tick positions """
         offset = [0.0, 0.0]
+        offset[LEFT] = self.enc_raw[LEFT] - enc_val[LEFT]
+        offset[RIGHT] = -1*(self.enc_raw[RIGHT] - enc_val[RIGHT])
+        self.set_enc_offset(offset)
+
+    def get_wheel_ang(self):
+        """ Getter for wheel angles """
+        ang = [0.0, 0.0]
+        enc_val = self.get_enc_val()
         for side in range(0, 2):
-            offset[side] = self.encRaw[side] - encPos[side]
-        self.setEncOffset(offset)
+            ang[side] = enc_val[side] / self.ticksPerTurn * 2 * np.pi
+        return ang
 
-    def getPos(self):
-        pos = [0.0, 0.0]
-        encPos = self.getEncPos()
+    def set_wheel_ang(self, ang):
+        """ Setter for wheel angles """
+        enc_val = [0.0, 0.0]
         for side in range(0, 2):
-            pos[side] = encPos[side] / self.ticksPerTurn * \
-                2 * np.pi * self.wheelRadius
-        return pos
+            enc_val[side] = ang[side] * self.ticksPerTurn / (2 * np.pi)
+        self.set_enc_val(enc_val)
 
-    def setPos(self, pos):
-        encPos = [0.0, 0.0]
+    def get_enc_offset(self):
+        """ Getter for encoder offset values """
+        return self.enc_offset
+
+    def set_enc_offset(self, offset):
+        """ Setter for encoder offset values """
         for side in range(0, 2):
-            encPos[side] = pos[side] * self.ticksPerTurn / \
-                (2 * np.pi * self.wheelRadius)
-        self.setEncPos(encPos)
+            self.enc_offset[side] = offset[side]
 
-    def getEncOffset(self):
-        return self.encOffset
+    def reset_enc_val(self):
+        """ Reset encoder values to 0 """
+        self.enc_offset[LEFT] = self.enc_raw[LEFT]
+        self.enc_offset[RIGHT] = self.enc_raw[RIGHT]
 
-    def setEncOffset(self, offset):
-        for side in range(0, 2):
-            self.encOffset[side] = offset[side]
-
-    def resetEncPos(self):
-        self.encOffset[LEFT] = self.encRaw[LEFT]
-        self.encOffset[RIGHT] = self.encRaw[RIGHT]
-
-    def getEncVel(self):
-        return self.encVel
+    def get_enc_vel(self):
+        """ Getter for encoder velocity values """
+        return self.enc_vel
 
 
-def readIR(self):
+def read_ir(self):
+    """ Thread function for reading IR sensor values """
     while self.run_flag:
-        for i in range(0, self.nIR):
+        for i in range(0, self.n_ir):
             ADC_LOCK.acquire()
-            self.irVal[i] = ADC.read_raw(config.IR[i])
+            self.ir_val[i] = ADC.read_raw(config.IR[i])
             time.sleep(ADCTIME)
             ADC_LOCK.release()
 
 
-def readEncPos(self, side):
+def read_enc_val(self, side):
+    """ Thread function for reading encoder values """
     while self.run_flag:
-        parseEncoderBuffer(self, side)
+        parse_encoder_buffer(self, side)
         time.sleep(self.sample_time)
 
 
-def parseEncoderBuffer(self, side):
-    encoderUpdateFlag = False
+def parse_encoder_buffer(self, side):
+    """ Parses encoder serial data """
+    encoder_update_flag = False
 
-    bytesInWaiting = self.encoderSerial[side].inWaiting()
+    bytes_in_waiting = self.encoderSerial[side].inWaiting()
 
-    if bytesInWaiting > 0:
+    if bytes_in_waiting > 0:
         self.encoderBuffer[side] += \
-            self.encoderSerial[side].read(bytesInWaiting)
+            self.encoderSerial[side].read(bytes_in_waiting)
 
         if len(self.encoderBuffer[side]) > 30:
             self.encoderBuffer[side] = self.encoderBuffer[side][-30:]
 
         if len(self.encoderBuffer[side]) >= 15:
-            DPattern = r'D([0-9A-F]{8})'
-            DRegex = re.compile(DPattern)
-            DResult = DRegex.findall(self.encoderBuffer[side])
-            if len(DResult) >= 1:
-                val = utils.convertHEXtoDEC(DResult[-1], 8)
+            d_pattern = r'D([0-9A-F]{8})'
+            d_regex = re.compile(d_pattern)
+            d_result = d_regex.findall(self.encoderBuffer[side])
+            if len(d_result) >= 1:
+                val = utils.convertHEXtoDEC(d_result[-1], 8)
                 if not math.isnan(val):
-                    self.encRaw[side] = val
-                    encoderUpdateFlag = True
+                    self.enc_raw[side] = val
+                    encoder_update_flag = True
 
-            VPattern = r'V([0-9A-F]{4})'
-            VRegex = re.compile(VPattern)
-            VResult = VRegex.findall(self.encoderBuffer[side])
-            if len(VResult) >= 1:
-                vel = utils.convertHEXtoDEC(VResult[-1], 4)
+            v_pattern = r'V([0-9A-F]{4})'
+            v_regex = re.compile(v_pattern)
+            v_result = v_regex.findall(self.encoderBuffer[side])
+            if len(v_result) >= 1:
+                vel = utils.convertHEXtoDEC(v_result[-1], 4)
                 if not math.isnan(vel):
-                    self.encVel[side] = vel
-                    encoderUpdateFlag = True
+                    self.enc_vel[side] = vel
+                    encoder_update_flag = True
 
-        return encoderUpdateFlag
+        return encoder_update_flag

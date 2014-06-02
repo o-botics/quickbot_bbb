@@ -23,7 +23,7 @@ MIN = 0
 MAX = 1
 
 DEBUG = False
-
+VERBOSE = True
 
 class BaseBot(object):
     """
@@ -164,7 +164,6 @@ class BaseBot(object):
         # Run loop
         while self.run_flag:
             self.update()
-
             time.sleep(self.sample_time)
         self.cleanup()
         return
@@ -192,14 +191,14 @@ class BaseBot(object):
     #     matrix = map(list, zip(*[self.encTimeRec[LEFT], self.encValRec[LEFT],
                              # self.encPWMRec[LEFT], self.encNNewRec[LEFT],
                              # self.encTickStateRec[LEFT],
-                             # self.encPosRec[LEFT],
+                             # self.enc_posRec[LEFT],
                              # self.encVelRec[LEFT],
                              # self.encThresholdRec[LEFT],
                              # self.encTimeRec[RIGHT],
                              # self.encValRec[RIGHT],
                              # self.encPWMRec[RIGHT], self.encNNewRec[RIGHT],
                              # self.encTickStateRec[RIGHT],
-                             # self.encPosRec[RIGHT], self.encVelRec[RIGHT],
+                             # self.enc_posRec[RIGHT], self.encVelRec[RIGHT],
                              # self.encThresholdRec[RIGHT]]))
     #     s = [[str(e) for e in row] for row in matrix]
     #     lens = [len(max(col, key=len)) for col in zip(*s)]
@@ -222,155 +221,168 @@ def parse_cmd(self):
 
             self.cmdBuffer += line
 
-            # String contained within $ and * symbols with no $ or * symbols in it
-            bufferPattern = r'\$[^\$\*]*?\*'
-            bufferRegex = re.compile(bufferPattern)
-            bufferResult = bufferRegex.search(self.cmdBuffer)
+            # String contained within $ and * (with no $ or * symbols in it)
+            buf_pattern = r'\$[^\$\*]*?\*'
+            buf_regex = re.compile(buf_pattern)
+            buf_result = buf_regex.search(self.cmdBuffer)
 
-            if bufferResult:
-                msg = bufferResult.group()
+            if buf_result:
+                msg = buf_result.group()
                 print msg
                 self.cmdBuffer = ''
 
-                cmdPattern = r'(?P<CMD>[A-Z]{3,})'
-                setPattern = r'(?P<SET>=?)'
-                queryPattern = r'(?P<QUERY>\??)'
-                argPattern = r'(?(2)(?P<ARGS>.*))'
-                msgPattern = r'\$' + \
-                    cmdPattern + \
-                    setPattern + \
-                    queryPattern + \
-                    argPattern + \
+                cmd_pattern = r'(?P<CMD>[A-Z]{3,})'
+                set_pattern = r'(?P<SET>=?)'
+                query_pattern = r'(?P<QUERY>\??)'
+                arg_pattern = r'(?(2)(?P<ARGS>.*))'
+                msg_pattern = r'\$' + \
+                    cmd_pattern + \
+                    set_pattern + \
+                    query_pattern + \
+                    arg_pattern + \
                     r'.*\*'
 
-                msgRegex = re.compile(msgPattern)
-                msgResult = msgRegex.search(msg)
+                msg_regex = re.compile(msg_pattern)
+                msg_result = msg_regex.search(msg)
 
-                if msgResult.group('CMD') == 'CHECK':
+                if msg_result.group('CMD') == 'CHECK':
                     self.robotSocket.sendto(
                         'Hello from QuickBot\n', (self.base_ip, self.port))
 
-                elif msgResult.group('CMD') == 'PWM':
-                    if msgResult.group('QUERY'):
-                        print(str(self.get_pwm()))
-                        self.robotSocket.sendto(
-                            str(self.get_pwm()) + '\n', (self.base_ip, self.port))
+                elif msg_result.group('CMD') == 'PWM':
+                    if msg_result.group('QUERY'):
+                        if VERBOSE:
+                            print str(self.get_pwm())
+                        self.robotSocket.sendto(str(self.get_pwm()) + '\n',
+                                                (self.base_ip, self.port))
 
-                    elif msgResult.group('SET') and msgResult.group('ARGS'):
-                        args = msgResult.group('ARGS')
-                        pwmArgPattern = r'(?P<LEFT>[-]?\d+),(?P<RIGHT>[-]?\d+)'
-                        pwmRegex = re.compile(pwmArgPattern)
-                        pwmResult = pwmRegex.match(args)
-                        if pwmResult:
-                            pwm = [int(pwmRegex.match(args).group('LEFT')),
-                                     int(pwmRegex.match(args).group('RIGHT'))]
+                    elif msg_result.group('SET') and msg_result.group('ARGS'):
+                        args = msg_result.group('ARGS')
+                        pwm_pattern = r'(?P<LEFT>[-]?\d+),(?P<RIGHT>[-]?\d+)'
+                        pwm_regex = re.compile(pwm_pattern)
+                        pwm_result = pwm_regex.match(args)
+                        if pwm_result:
+                            pwm = [int(pwm_result.group('LEFT')), \
+                                    int(pwm_result.group('RIGHT'))]
                             self.set_pwm(pwm)
-                            self.robotSocket.sendto(str(self.get_pwm()) + '\n', (self.base_ip, self.port))
 
-                elif msgResult.group('CMD') == 'IRVAL':
-                    if msgResult.group('QUERY'):
-                        reply = '[' + ', '.join(map(str, self.getIr())) + ']'
+                    self.robotSocket.sendto(str(self.get_pwm()) + '\n',
+                                            (self.base_ip, self.port))
+
+                elif msg_result.group('CMD') == 'IRVAL':
+                    if msg_result.group('QUERY'):
+                        reply = '[' + ', '.join(map(str, self.get_ir())) + ']'
                         print 'Sending: ' + reply
                         self.robotSocket.sendto(
                             reply + '\n', (self.base_ip, self.port))
 
-                elif msgResult.group('CMD') == 'ULTRAVAL':
-                    if msgResult.group('QUERY'):
+                elif msg_result.group('CMD') == 'ULTRAVAL':
+                    if msg_result.group('QUERY'):
                         reply = '[' + ', '.join(map(str, self.ultraVal)) + ']'
                         print 'Sending: ' + reply
                         self.robotSocket.sendto(
                             reply + '\n', (self.base_ip, self.port))
 
-                elif msgResult.group('CMD') == 'POS':
-                    if msgResult.group('QUERY'):
-                        print 'Sending: ' + str(self.getPos())
+                elif msg_result.group('CMD') == 'WHEELANG':
+                    if msg_result.group('QUERY'):
+                        print 'Sending: ' + str(self.get_wheel_ang())
                         self.robotSocket.sendto(
-                            reply + '\n', (self.base_ip, self.port))
+                            str(self.get_wheel_ang()) +
+                            '\n', (self.base_ip, self.port))
 
-                    elif msgResult.group('SET') and msgResult.group('ARGS'):
-                        args = msgResult.group('ARGS')
-                        argPattern = r'(?P<LEFT>[-]?\d+[\.]?\d*),(?P<RIGHT>[-]?\d+[\.]?\d*)'
-                        regex = re.compile(argPattern)
+                    elif msg_result.group('SET') and msg_result.group('ARGS'):
+                        args = msg_result.group('ARGS')
+                        arg_pattern = \
+                        r'(?P<LEFT>[-]?\d+[\.]?\d*),(?P<RIGHT>[-]?\d+[\.]?\d*)'
+                        regex = re.compile(arg_pattern)
                         result = regex.match(args)
                         if result:
-                            pos = [float(regex.match(args).group('LEFT')),
-                                     float(regex.match(args).group('RIGHT'))]
-                            self.setPos(pos)
+                            pos = [float(regex.match(args).group('LEFT')), \
+                                float(regex.match(args).group('RIGHT'))]
+                            self.set_wheel_ang(pos)
 
-                elif msgResult.group('CMD') == 'ENPOS' or \
-                        msgResult.group('CMD') == 'ENVAL':
-                    if msgResult.group('QUERY'):
-                        reply = '[' + ', '.join(map(str, self.getEncPos())) + ']'
-                        print 'Sending: ' + reply
-                        self.robotSocket.sendto(
-                            reply + '\n', (self.base_ip, self.port))
-
-                    elif msgResult.group('SET') and msgResult.group('ARGS'):
-                        args = msgResult.group('ARGS')
-                        argPattern = r'(?P<LEFT>[-]?\d+[\.]?\d*),(?P<RIGHT>[-]?\d+[\.]?\d*)'
-                        regex = re.compile(argPattern)
-                        result = regex.match(args)
-                        if result:
-                            encPos = [float(regex.match(args).group('LEFT')),
-                                     float(regex.match(args).group('RIGHT'))]
-                            self.setEncPos(encPos)
-
-                elif msgResult.group('CMD') == 'ENRAW':
-                    if msgResult.group('QUERY'):
-                        reply = '[' + ', '.join(map(str, self.getEncRaw())) + ']'
-                        print 'Sending: ' + reply
-                        self.robotSocket.sendto(
-                            reply + '\n', (self.base_ip, self.port))
-
-                elif msgResult.group('CMD') == 'ENOFFSET':
-                    if msgResult.group('QUERY'):
+                elif msg_result.group('CMD') == 'ENVAL':
+                    if msg_result.group('QUERY'):
                         reply = \
-                            '[' + ', '.join(map(str, self.getEncOffset())) + ']'
+                            '[' + ', '.join(map(str, self.get_enc_val())) + ']'
                         print 'Sending: ' + reply
                         self.robotSocket.sendto(
                             reply + '\n', (self.base_ip, self.port))
 
-                    elif msgResult.group('SET') and msgResult.group('ARGS'):
-                        args = msgResult.group('ARGS')
-                        argPattern = r'(?P<LEFT>[-]?\d+[\.]?\d*),(?P<RIGHT>[-]?\d+[\.]?\d*)'
-                        regex = re.compile(argPattern)
+                    elif msg_result.group('SET') and msg_result.group('ARGS'):
+                        args = msg_result.group('ARGS')
+                        arg_pattern = \
+                        r'(?P<LEFT>[-]?\d+[\.]?\d*),(?P<RIGHT>[-]?\d+[\.]?\d*)'
+                        regex = re.compile(arg_pattern)
                         result = regex.match(args)
                         if result:
-                            offset = [float(regex.match(args).group('LEFT')),
+                            enc_pos = [float(regex.match(args).group('LEFT')), \
                                      float(regex.match(args).group('RIGHT'))]
-                            self.setEncOffset(offset)
+                            self.set_enc_val(enc_pos)
 
-                elif msgResult.group('CMD') == 'ENVEL':
-                    if msgResult.group('QUERY'):
-                        reply = '[' + ', '.join(map(str, self.getEncVel())) + ']'
+                elif msg_result.group('CMD') == 'ENRAW':
+                    if msg_result.group('QUERY'):
+                        reply = \
+                            '[' + ', '.join(map(str, self.get_enc_raw())) + ']'
                         print 'Sending: ' + reply
                         self.robotSocket.sendto(
                             reply + '\n', (self.base_ip, self.port))
 
-                elif msgResult.group('CMD') == 'ENRESET':
-                    self.resetEncPos()
-                    print 'Encoder values reset to [' + ', '.join(
-                        map(str, self.encVel)) + ']'
+                elif msg_result.group('CMD') == 'ENOFFSET':
+                    if msg_result.group('QUERY'):
+                        reply = '[' + \
+                            ', '.join(map(str, self.get_enc_offset())) + ']'
+                        print 'Sending: ' + reply
+                        self.robotSocket.sendto(
+                            reply + '\n', (self.base_ip, self.port))
 
-                elif msgResult.group('CMD') == 'UPDATE':
-                    if msgResult.group('SET') and msgResult.group('ARGS'):
-                        args = msgResult.group('ARGS')
-                        pwmArgPattern = r'(?P<LEFT>[-]?\d+),(?P<RIGHT>[-]?\d+)'
-                        pwmRegex = re.compile(pwmArgPattern)
-                        pwmResult = pwmRegex.match(args)
-                        if pwmResult:
-                            pwm = [int(pwmRegex.match(args).group('LEFT')),
-                                     int(pwmRegex.match(args).group('RIGHT'))]
+                    elif msg_result.group('SET') and msg_result.group('ARGS'):
+                        args = msg_result.group('ARGS')
+                        arg_pattern = \
+                        r'(?P<LEFT>[-]?\d+[\.]?\d*),(?P<RIGHT>[-]?\d+[\.]?\d*)'
+                        regex = re.compile(arg_pattern)
+                        result = regex.match(args)
+                        if result:
+                            offset = [float(regex.match(args).group('LEFT')), \
+                                     float(regex.match(args).group('RIGHT'))]
+                            self.set_enc_offset(offset)
+
+                elif msg_result.group('CMD') == 'ENVEL':
+                    if msg_result.group('QUERY'):
+                        reply = \
+                            '[' + ', '.join(map(str, self.get_enc_vel())) + ']'
+                        print 'Sending: ' + reply
+                        self.robotSocket.sendto(
+                            reply + '\n', (self.base_ip, self.port))
+
+                elif msg_result.group('CMD') == 'ENRESET':
+                    self.reset_enc_val()
+                    reply = \
+                            '[' + ', '.join(map(str, self.get_enc_val())) + ']'
+                    print 'Encoder values reset to ' + reply
+
+                elif msg_result.group('CMD') == 'UPDATE':
+                    if msg_result.group('SET') and msg_result.group('ARGS'):
+                        args = msg_result.group('ARGS')
+                        pwm_pattern = r'(?P<LEFT>[-]?\d+),(?P<RIGHT>[-]?\d+)'
+                        pwm_regex = re.compile(pwm_pattern)
+                        pwm_result = pwm_regex.match(args)
+                        if pwm_result:
+                            pwm = [int(pwm_regex.match(args).group('LEFT')), \
+                                    int(pwm_regex.match(args).group('RIGHT'))]
                             self.set_pwm(pwm)
 
-                        reply = '[' + ', '.join(map(str, self.encPos)) + ', ' \
+                        reply = '[' + ', '.join(map(str, self.enc_pos)) + ', ' \
                             + ', '.join(map(str, self.encVel)) + ']'
                         print 'Sending: ' + reply
                         self.robotSocket.sendto(
                             reply + '\n', (self.base_ip, self.port))
 
-                elif msgResult.group('CMD') == 'END':
+                elif msg_result.group('CMD') == 'END':
                     self.end_run()
+
+                else:
+                    print 'Invalid: ' + msg
     except:
         self.end_run()
         raise
