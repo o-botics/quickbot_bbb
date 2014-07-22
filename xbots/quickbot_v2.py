@@ -62,9 +62,12 @@ class QuickBot(base.BaseBot):
     # Encoder parameters
     enc_vel_buf_size = 10 # Size of encoder velocity buffer
 
-    # State Encoder
+    # State encoder
     enc_raw = [0.0, 0.0]  # Last encoder tick position
     enc_vel = [0.0, 0.0]  # Last encoder tick velocity
+
+    # Controller paramerters
+    wheel_ang_vel_controller_flag = 2*[False]
 
     def __init__(self, base_ip, robot_ip):
         super(QuickBot, self).__init__(base_ip, robot_ip)
@@ -74,40 +77,62 @@ class QuickBot(base.BaseBot):
         self.ir_val = self.n_ir*[0.0]
 
         # State Encoder
-        self.enc_dir = [1, -1]      # Last encoder direction
-        self.enc_raw = [0, 0]      # Last encoder tick position
-        self.enc_vel = [0.0, 0.0]  # Last encoder tick velocity
-        self.enc_offset = [0.0, 0.0]  # Offset from raw encoder tick
+        self.enc_dir = [1, -1]         # Last encoder direction
+        self.enc_raw = [0, 0]          # Last encoder tick position
+        self.enc_vel = [0.0, 0.0]      # Last encoder tick velocity
+        self.enc_offset = [0.0, 0.0]   # Offset from raw encoder tick
         self.enc_vel_buf_cnt = [0, 0]  # Encoder velocity buffer counters
         self.enc_vel_buf = [[0.0] * self.enc_vel_buf_size,
                             [0.0] * self.enc_vel_buf_size]  # Encoder velocity buffers
 
+        # Set Points
+        self.wheel_ang_vel_set_point = [0.0, 0.0]
 
         # Initialize ADC
         ADC.setup()
 
         # Initialize IR thread
-        self.ir_thread = threading.Thread(target=read_ir, args=(self, ))
+        self.ir_thread = threading.Thread(target=read_ir_thread_fcn, args=(self, ))
         self.ir_thread.daemon = True
 
         # Initialize encoder threads
         self.enc_pos_thread = 2*[None]
         for side in range(0, 2):
             self.enc_pos_thread[side] = threading.Thread(
-                target=read_enc_val, args=(self, side))
+                target=read_enc_val_thread_fcn, args=(self, side))
             self.enc_pos_thread[side].daemon = True
+
+        # Initialize wheel controller thread
+        self.wheel_ang_vel_controller_thread = 2*[None]
+        for side in range(0, 2):
+            self.wheel_ang_vel_controller_thread[side] = threading.Thread(
+                target=wheel_ang_vel_controller_thread_fcn, args=(self, side))
+            self.wheel_ang_vel_controller_thread[side].daemon = True
+
 
     def start_threads(self):
         """ Start all threads """
         self.ir_thread.start()
         for side in range(0, 2):
             self.enc_pos_thread[side].start()
+            self.wheel_ang_vel_controller_thread[side].start()
 
         # Calibrate encoders
         self.calibrate_enc_val()
 
         # Call parent method
         super(QuickBot, self).start_threads()
+
+    def set_pwm_left(self, pwm_left):
+        """ Set left motor PWM value """
+        self.wheel_ang_vel_controller_flag[LEFT] = False
+        super(QuickBot, self).set_pwm_left(pwm_left)
+
+
+    def set_pwm_right(self, pwm_right):
+        """ Set right motor PWM value """
+        self.wheel_ang_vel_controller_flag[RIGHT] = False
+        super(QuickBot, self).set_pwm_right(pwm_right)
 
 
     def get_ir(self):
@@ -171,21 +196,58 @@ class QuickBot(base.BaseBot):
         """ Getter for encoder velocity values """
         return self.enc_vel
 
+    def set_enc_vel(self, env_vel):
+        """ Setter for encoder velocity values """
+        for side in range(0, 2):
+            self.enc_vel_set_point[side] = env_vel[side]
+        self.enc_vel_controller_flag = 2*[True]
+
+
     def get_wheel_ang_vel(self):
         """ Getter for wheel angular velocity values """
         ang_vel = [0.0, 0.0]
         enc_vel = self.get_enc_vel()
         for side in range(0, 2):
-            ang_vel[side] = enc_vel[side] * (2* PI) / self.ticksPerTurn
+            ang_vel[side] = enc_vel[side] * (2 * PI) / self.ticksPerTurn
         return ang_vel
 
     def set_wheel_ang_vel(self, ang_vel):
         """ Setter for wheel angular velocity values """
-        pass
+        for side in range(0, 2):
+            self.wheel_ang_vel_set_point[side] = ang_vel[side]
+        self.wheel_ang_vel_controller_flag = 2*[True]
 
 
+def wheel_ang_vel_controller_thread_fcn(self, side):
+    """ Thread function for controlling for wheel angular velocity """
+    while self.run_flag:
+        if self.wheel_ang_vel_controller_flag[side]:
+            x = self.enc_vel[side] * (2 * PI) / self.ticksPerTurn
+            u = self.pwm[side]
+            x_bar = self.wheel_ang_vel_set_point[side]
 
-def read_ir(self):
+            u_plus = wheel_ang_vel_controller(x, u, x_bar)
+
+            if side == LEFT:
+                # print "left: " + str(u_plus)
+                super(QuickBot, self).set_pwm_left(u_plus)
+            else:
+                super(QuickBot, self).set_pwm_right(u_plus)
+
+        time.sleep(self.sample_time)
+
+def wheel_ang_vel_controller(x, u, x_bar):
+    """ Wheel angular velocity controller """
+    controller_type = 'PID'
+
+    if controller_type == 'PID':
+        P = 0.15
+        u_plus = P * (x_bar - x) + u
+
+    return u_plus
+
+
+def read_ir_thread_fcn(self):
     """ Thread function for reading IR sensor values """
     while self.run_flag:
         for i in range(0, self.n_ir):
@@ -195,7 +257,7 @@ def read_ir(self):
             ADC_LOCK.release()
 
 
-def read_enc_val(self, side):
+def read_enc_val_thread_fcn(self, side):
     """ Thread function for reading encoder values """
     while self.run_flag:
         parse_encoder_buffer(self, side)
@@ -231,7 +293,7 @@ def parse_encoder_buffer(self, side):
             if len(v_result) >= 1:
                 vel = utils.convertHEXtoDEC(v_result[-1], 4)
                 if not math.isnan(vel):
-                    if side == 1:
+                    if side == RIGHT:
                         vel = -1*vel
                     self.enc_vel_buf_cnt[side] += 1
                     this_cnt = self.enc_vel_buf_cnt[side]
