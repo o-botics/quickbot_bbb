@@ -73,6 +73,11 @@ class QuickBot(base.BaseBot):
         self.enc_raw = [0, 0]      # Last encoder tick position
         self.enc_vel = [0.0, 0.0]  # Last encoder tick velocity
         self.enc_offset = [0.0, 0.0]  # Offset from raw encoder tick
+        self.enc_vel_buf_size = 10
+        self.enc_vel_buf_cnt = [0, 0]
+        self.enc_vel_buf = [[0.0] * self.enc_vel_buf_size,
+                            [0.0] * self.enc_vel_buf_size]
+
 
         # Initialize ADC
         ADC.setup()
@@ -82,9 +87,7 @@ class QuickBot(base.BaseBot):
         self.ir_thread.daemon = True
 
         # Initialize encoder threads
-        self.enc_dir_thread = 2*[None]
         self.enc_pos_thread = 2*[None]
-        self.enc_vel_thread = 2*[None]
         for side in range(0, 2):
             self.enc_pos_thread[side] = threading.Thread(
                 target=read_enc_val, args=(self, side))
@@ -213,7 +216,19 @@ def parse_encoder_buffer(self, side):
                 if not math.isnan(vel):
                     if side == 1:
                         vel = -1*vel
-                    self.enc_vel[side] = vel
+                    self.enc_vel_buf_cnt[side] += 1
+                    this_cnt = self.enc_vel_buf_cnt[side]
+                    this_size = self.enc_vel_buf_size
+                    self.enc_vel_buf[side][this_cnt % this_size] = vel
+                    this_vel = np.median(self.enc_vel_buf[side])
+                    self.enc_vel[side] = this_vel
                     encoder_update_flag = True
+    else:
+        self.enc_vel_buf_cnt[side] += 1
+        this_cnt = self.enc_vel_buf_cnt[side]
+        this_size = self.enc_vel_buf_size
+        self.enc_vel_buf[side][this_cnt % this_size] = 0.0
+        this_vel = np.median(self.enc_vel_buf[side])
+        self.enc_vel[side] = this_vel
 
         return encoder_update_flag
