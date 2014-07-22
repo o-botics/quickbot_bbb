@@ -4,8 +4,7 @@
 @author Josip Delic (delijati.net)
 @date 04/23/2014
 @version: 0.1
-@copyright: Copyright (C) 2014, Georgia Tech Research Corporation
-see the LICENSE file included with this software (see LINENSE file)
+@copyright: Copyright (C) 2014, see the LICENSE file
 """
 
 from __future__ import division
@@ -35,7 +34,7 @@ ENC_POS = [0.0, 0.0]
 
 
 class UltraBot(base.BaseBot):
-    """The QuickBot Class"""
+    """The UltraBot Class"""
     # Motor Pins -- (LEFT, RIGHT)
     dir1Pin = (config.INl1, config.INr1)
     dir2Pin = (config.INl2, config.INr2)
