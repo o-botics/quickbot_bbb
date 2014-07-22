@@ -17,6 +17,8 @@ import serial
 import math
 
 import numpy as np
+from numpy import pi as PI
+
 import quickbot_v2_config as config
 import Adafruit_BBIO.ADC as ADC
 
@@ -53,9 +55,12 @@ class QuickBot(base.BaseBot):
             timeout=.1))
     encoderBuffer = ['', '']
 
-    # Wheel parameter
+    # Wheel parameters
     ticksPerTurn = 128  # Number of ticks on encoder disc
     wheelRadius = (58.7 / 2.0) / 1000.0  # Radius of wheel in meters
+
+    # Encoder parameters
+    enc_vel_buf_size = 10 # Size of encoder velocity buffer
 
     # State Encoder
     enc_raw = [0.0, 0.0]  # Last encoder tick position
@@ -73,10 +78,9 @@ class QuickBot(base.BaseBot):
         self.enc_raw = [0, 0]      # Last encoder tick position
         self.enc_vel = [0.0, 0.0]  # Last encoder tick velocity
         self.enc_offset = [0.0, 0.0]  # Offset from raw encoder tick
-        self.enc_vel_buf_size = 10
-        self.enc_vel_buf_cnt = [0, 0]
+        self.enc_vel_buf_cnt = [0, 0]  # Encoder velocity buffer counters
         self.enc_vel_buf = [[0.0] * self.enc_vel_buf_size,
-                            [0.0] * self.enc_vel_buf_size]
+                            [0.0] * self.enc_vel_buf_size]  # Encoder velocity buffers
 
 
         # Initialize ADC
@@ -139,14 +143,14 @@ class QuickBot(base.BaseBot):
         ang = [0.0, 0.0]
         enc_val = self.get_enc_val()
         for side in range(0, 2):
-            ang[side] = enc_val[side] / self.ticksPerTurn * 2 * np.pi
+            ang[side] = enc_val[side] / self.ticksPerTurn * 2 * PI
         return ang
 
-    def set_wheel_ang(self, ang):
+    def set_wheel_ang(self, ang):  # FIXME - Should move wheel to that angle
         """ Setter for wheel angles """
         enc_val = [0.0, 0.0]
         for side in range(0, 2):
-            enc_val[side] = ang[side] * self.ticksPerTurn / (2 * np.pi)
+            enc_val[side] = ang[side] * self.ticksPerTurn / (2 * PI)
         self.set_enc_val(enc_val)
 
     def get_enc_offset(self):
@@ -166,6 +170,19 @@ class QuickBot(base.BaseBot):
     def get_enc_vel(self):
         """ Getter for encoder velocity values """
         return self.enc_vel
+
+    def get_wheel_ang_vel(self):
+        """ Getter for wheel angular velocity values """
+        ang_vel = [0.0, 0.0]
+        enc_vel = self.get_enc_vel()
+        for side in range(0, 2):
+            ang_vel[side] = enc_vel[side] * (2* PI) / self.ticksPerTurn
+        return ang_vel
+
+    def set_wheel_ang_vel(self, ang_vel):
+        """ Setter for wheel angular velocity values """
+        pass
+
 
 
 def read_ir(self):

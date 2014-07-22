@@ -355,6 +355,14 @@ def parse_cmd(self):
                         self.robotSocket.sendto(
                             reply + '\n', (self.base_ip, self.port))
 
+                elif msg_result.group('CMD') == 'WHEELANGVEL':
+                    if msg_result.group('QUERY'):
+                        reply = \
+                            '[' + ', '.join(map(str, self.get_wheel_ang_vel())) + ']'
+                        print 'Sending: ' + reply
+                        self.robotSocket.sendto(
+                            reply + '\n', (self.base_ip, self.port))
+
                 elif msg_result.group('CMD') == 'ENRESET':
                     self.reset_enc_val()
                     reply = \
