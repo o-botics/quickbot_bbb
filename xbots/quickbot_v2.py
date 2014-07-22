@@ -211,6 +211,8 @@ def parse_encoder_buffer(self, side):
             if len(v_result) >= 1:
                 vel = utils.convertHEXtoDEC(v_result[-1], 4)
                 if not math.isnan(vel):
+                    if side == 1:
+                        vel = -1*vel
                     self.enc_vel[side] = vel
                     encoder_update_flag = True
 
