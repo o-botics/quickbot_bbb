@@ -361,6 +361,17 @@ def parse_cmd(self):
                         self.robotSocket.sendto(
                             reply + '\n', (self.base_ip, self.port))
 
+                    elif msg_result.group('SET') and msg_result.group('ARGS'):
+                        args = msg_result.group('ARGS')
+                        arg_pattern = \
+                        r'(?P<LEFT>[-]?\d+[\.]?\d*),(?P<RIGHT>[-]?\d+[\.]?\d*)'
+                        regex = re.compile(arg_pattern)
+                        result = regex.match(args)
+                        if result:
+                            enc_vel = [float(regex.match(args).group('LEFT')), \
+                            float(regex.match(args).group('RIGHT'))]
+                            self.set_enc_vel(enc_vel)
+
                 elif msg_result.group('CMD') == 'WHEELANGVEL':
                     if msg_result.group('QUERY'):
                         reply = \

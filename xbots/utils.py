@@ -39,8 +39,8 @@ def operatingPoint(uStar, uStarThreshold):
     returns: omegaStar - steady state tick velocity
     """
     # Matlab code to find beta values
-    # X = [40; 80; 100]; % Air Test
-    # Y = [0.85; 2.144; 3.5];
+    # X = [40; 50; 60]; % Air Test
+    # Y = [180; 305; 400]; % Tick per second
     #
     # r = 0.0325; % Wheel radius
     # c = 2*pi*r;
@@ -51,8 +51,8 @@ def operatingPoint(uStar, uStarThreshold):
     # Y = 1./(Z*c);
     # H = [X ones(size(X))];
     # beta = H \ Y
-    # beta = [0.0425, -0.9504] # Air Test Results
-    beta = [0.0606, -3.1475]  # Ground Test Results
+    beta = [11.0, -255.0] # Air Test Results
+    # beta = [0.0606, -3.1475]  # Ground Test Results
 
     if np.abs(uStar) <= uStarThreshold:
         omegaStar = 0.0
@@ -64,15 +64,17 @@ def operatingPoint(uStar, uStarThreshold):
     return omegaStar
 
 
-def kalman(x, P, Phi, H, W, V, z):
+def kalman(x, u, P, A, B, C, W, V, z=np.NaN):
     """
     This function returns an optimal expected value of the state and covariance
     error matrix given an update and system parameters.
 
-    x:   Estimate of staet at time t-1.
+    x:   Estimate of state at time t-1.
+    u:   Input at time t-1.
     P:   Estimate of error covariance matrix at time t-1.
-    Phi: Discrete time state tranistion matrix at time t-1.
-    H:   Observation model matrix at time t.
+    A:   Discrete time state tranistion matrix at time t-1.
+    B:   Input to state model matrix at time t-1.
+    C:   Observation model matrix at time t.
     W:   Process noise covariance at time t-1.
     V:   Measurement noise covariance at time t.
     z:   Measurement at time t.
@@ -82,21 +84,46 @@ def kalman(x, P, Phi, H, W, V, z):
     P: Updated estimate of error covariance matrix at time t.
 
     """
-    x_p = Phi * x  # Prediction of setimated state vector
-    P_p = Phi * P * Phi + W  # Prediction of error covariance matrix
-    S = H * P_p * H + V  # Sum of error variances
-    S_inv = 1 / S  # Inverse of sum of error variances
-    K = P_p * H * S_inv  # Kalman gain
-    r = z - H * x_p  # Prediction residual
-    w = -K * r  # Process error
-    x = x_p - w  # Update estimated state vector
-    # v = z - H * x  # Measurement error
-    if np.isnan(K * V):
-        P = P_p
+
+    x = np.atleast_2d(x)
+    u = np.atleast_2d(u)
+    P = np.atleast_2d(P)
+    A = np.atleast_2d(A)
+    B = np.atleast_2d(B)
+    x_p = np.dot(A, x) + np.dot(B, u)  # Prediction of estimated state vector
+    P_p = np.dot(A, np.dot(P, A.T)) + W  # Prediction of error covariance matrix
+
+    if np.any(np.isnan(z)):
+        return (x_p, P_p)
     else:
-        # Updated error covariance matrix
-        P = (1 - K * H) * P_p * (1 - K * H) + K * V * K
-    return (x, P)
+        C = np.atleast_2d(C)
+        W = np.atleast_2d(W)
+        V = np.atleast_2d(V)
+        z = np.atleast_2d(z)
+
+        [M,N] = np.shape(C)
+
+        if W.shape[0] == 1 or W.shape[1] == 1:
+            W = np.diag(np.squeeze(W))
+
+        if (V.shape[0] == 1 or V.shape[1] == 1) and not (V.shape[0] == 1 and V.shape[1] == 1):
+            V = np.diag(np.squeeze(V))
+
+        I = np.eye(N) # N x N identity matrix
+
+        S = np.dot(C, np.dot(P_p, C.T)) + V  # Sum of error variances
+        S_inv = np.linalg.inv(S)  # Inverse of sum of error variances
+        K = np.dot(P_p, np.dot(C.T, S_inv))  # Kalman gain
+        r = z - np.dot(C, x_p)  # Prediction residual
+        w = np.dot(-K, r) # Process error
+        x = x_p - w  # Update estimated state vector
+        # v = z - np.dot(C, x)  # Measurement error
+        if np.any(np.isnan(np.dot(K, V))):
+            P = P_p
+        else:
+            # Updated error covariance matrix
+            P = np.dot((I - np.dot(K, C)), np.dot(P_p, (I - np.dot(K, C)).T)) + np.dot(K, np.dot(V, K.T))
+        return (x, P)
 
 
 def tic():
