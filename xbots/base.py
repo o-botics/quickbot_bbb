@@ -88,11 +88,9 @@ class BaseBot(object):
         GPIO.setup(self.dir2Pin[RIGHT], GPIO.OUT)
         GPIO.setup(self.led, GPIO.OUT)
 
-    # def _init_pwm(self, frequency=2000):
     def _init_pwm(self):
         """
-        Initialize PWM pins:
-            PWM.start(channel, duty, freq=2000, polarity=0)
+        Initialize PWM pins
         """
 
         # It is currently not possible to set frequency for two PWM
@@ -105,12 +103,15 @@ class BaseBot(object):
         """ Set motor PWM values """
         # [leftSpeed, rightSpeed]: 0 is off, caps at min and max values
 
-        self.pwm[LEFT] = min(
-            max(pwm[LEFT], self.pwmLimits[MIN]), self.pwmLimits[MAX])
-        self.pwm[RIGHT] = min(
-            max(pwm[RIGHT], self.pwmLimits[MIN]), self.pwmLimits[MAX])
+        self.set_pwm_left(pwm[LEFT])
+        self.set_pwm_right(pwm[RIGHT])
 
-        # Left motor
+    def set_pwm_left(self, pwm_left):
+        """ Set left motor PWM value """
+
+        self.pwm[LEFT] = min(
+            max(pwm_left, self.pwmLimits[MIN]), self.pwmLimits[MAX])
+
         if self.pwm[LEFT] > 0:
             GPIO.output(self.dir1Pin[LEFT], GPIO.LOW)
             GPIO.output(self.dir2Pin[LEFT], GPIO.HIGH)
@@ -124,7 +125,12 @@ class BaseBot(object):
             GPIO.output(self.dir2Pin[LEFT], GPIO.LOW)
             PWM.set_duty_cycle(self.pwmPin[LEFT], 0)
 
-        # Right motor
+    def set_pwm_right(self, pwm_right):
+        """ Set right motor PWM value """
+
+        self.pwm[RIGHT] = min(
+            max(pwm_right, self.pwmLimits[MIN]), self.pwmLimits[MAX])
+
         if self.pwm[RIGHT] > 0:
             GPIO.output(self.dir1Pin[RIGHT], GPIO.LOW)
             GPIO.output(self.dir2Pin[RIGHT], GPIO.HIGH)
@@ -355,6 +361,17 @@ def parse_cmd(self):
                         self.robotSocket.sendto(
                             reply + '\n', (self.base_ip, self.port))
 
+                    elif msg_result.group('SET') and msg_result.group('ARGS'):
+                        args = msg_result.group('ARGS')
+                        arg_pattern = \
+                        r'(?P<LEFT>[-]?\d+[\.]?\d*),(?P<RIGHT>[-]?\d+[\.]?\d*)'
+                        regex = re.compile(arg_pattern)
+                        result = regex.match(args)
+                        if result:
+                            enc_vel = [float(regex.match(args).group('LEFT')), \
+                            float(regex.match(args).group('RIGHT'))]
+                            self.set_enc_vel(enc_vel)
+
                 elif msg_result.group('CMD') == 'WHEELANGVEL':
                     if msg_result.group('QUERY'):
                         reply = \
@@ -362,6 +379,17 @@ def parse_cmd(self):
                         print 'Sending: ' + reply
                         self.robotSocket.sendto(
                             reply + '\n', (self.base_ip, self.port))
+
+                    elif msg_result.group('SET') and msg_result.group('ARGS'):
+                        args = msg_result.group('ARGS')
+                        arg_pattern = \
+                        r'(?P<LEFT>[-]?\d+[\.]?\d*),(?P<RIGHT>[-]?\d+[\.]?\d*)'
+                        regex = re.compile(arg_pattern)
+                        result = regex.match(args)
+                        if result:
+                            wheel_ang_vel = [float(regex.match(args).group('LEFT')), \
+                                     float(regex.match(args).group('RIGHT'))]
+                            self.set_wheel_ang_vel(wheel_ang_vel)
 
                 elif msg_result.group('CMD') == 'ENRESET':
                     self.reset_enc_val()
