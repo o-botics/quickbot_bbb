@@ -136,6 +136,10 @@ class QuickBot(base.BaseBot):
         self.readIRValues()
         self.readEncoderValues()
 
+    def get_ir(self):
+        """ Getter for IR sensor values """
+        return self.irVal
+
     def readIRValues(self):
         prevVal = self.irVal[self.ithIR]
         ADC_LOCK.acquire()
