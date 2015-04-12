@@ -14,7 +14,7 @@ import argparse
 
 
 DESCRIPTION = ""
-RTYPES = ('quick_v2', 'quick_v1,', 'ultra')
+RTYPES = ('quick_v2', 'quick_v1', 'ultra')
 
 
 def main(options):
