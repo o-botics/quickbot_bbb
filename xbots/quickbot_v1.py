@@ -135,7 +135,6 @@ class QuickBot(base.BaseBot):
     def update(self):
         self.readIRValues()
         self.readEncoderValues()
-        self.parseCmdBuffer()
 
     def readIRValues(self):
         prevVal = self.irVal[self.ithIR]
